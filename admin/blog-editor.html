@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal Blog CMS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 40px auto;
+        }
+        input, textarea {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Create Blog Post</h1>
+
+<input id="title" placeholder="Title" />
+<input id="description" placeholder="Short description" />
+<input id="tags" placeholder="Tags (comma separated)" />
+<textarea id="content" rows="12" placeholder="Write your markdown content here..."></textarea>
+
+<button onclick="submitPost()">Create Post</button>
+
+<p id="status"></p>
+
+<script>
+async function submitPost() {
+    const title = document.getElementById("title").value;
+    const description = document.getElementById("description").value;
+    const tags = document.getElementById("tags").value;
+    const content = document.getElementById("content").value;
+
+    const response = await fetch("/create-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description, tags, content })
+    });
+
+    const result = await response.json();
+
+    const status = document.getElementById("status");
+    if (result.success) {
+        status.innerText = "✅ Post created successfully!";
+    } else {
+        status.innerText = "❌ Error: " + result.error;
+    }
+}
+</script>
+
+</body>
+</html>

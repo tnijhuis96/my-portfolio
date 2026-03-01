@@ -1,6 +1,23 @@
+require('dotenv').config();
+function validateEnvironment() {
+    if (!process.env.GITHUB_USERNAME) {
+        throw new Error("❌ GITHUB_USERNAME missing in environment variables.");
+    }
+
+    if (!process.env.GITHUB_TOKEN) {
+        console.warn("⚠️ No GITHUB_TOKEN provided. Falling back to unauthenticated GitHub requests (rate limit: 60/hour).");
+    }
+}
+validateEnvironment();
 const fs = require("fs");
 const path = require("path");
+const matter = require("gray-matter");
 const { marked } = require("marked");
+
+// Ensure fetch is available in Node.js (for Node < 18, use node-fetch)
+if (typeof fetch === 'undefined') {
+    global.fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+}
 
 const srcDir = path.join(__dirname, "src");
 const distDir = path.join(__dirname, "dist");
@@ -28,6 +45,30 @@ fs.copyFileSync(
     path.join(distDir, "css/style.css")
 );
 
+async function fetchGitHubRepos() {
+    const headers = {
+        "Accept": "application/vnd.github+json"
+    };
+
+    if (process.env.GITHUB_TOKEN) {
+        headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
+
+    const response = await fetch(
+        `https://api.github.com/users/${process.env.GITHUB_USERNAME}/repos`,
+        { headers }
+    );
+
+    if (!response.ok) {
+        throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    }
+
+    const repos = await response.json();
+
+    return repos
+        .filter(repo => !repo.fork)
+        .sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at));
+}
 function applyLayout(title, content, basePath = "") {
     return layout
         .replace("{{title}}", title)
@@ -77,29 +118,22 @@ const files = fs.readdirSync(postsDir);
 let postsMeta = [];
 
 files.forEach(file => {
-    const raw = fs.readFileSync(
-        path.join(postsDir, file),
-        "utf-8"
-    );
+    const filePath = path.join(postsDir, file);
+    const fileContent = fs.readFileSync(filePath, "utf-8");
 
-    const [_, frontmatter, content] = raw.split("---");
-
-    const meta = {};
-    frontmatter.split("\n").forEach(line => {
-        const [key, value] = line.split(":").map(s => s.trim());
-        if (key && value) meta[key] = value;
-    });
+    // ✅ Proper frontmatter parsing
+    const { data, content } = matter(fileContent);
 
     const htmlContent = marked(content);
 
     const postHtml = postTemplate
-        .replace("{{title}}", meta.title)
+        .replace("{{title}}", data.title || "Untitled")
         .replace("{{content}}", htmlContent);
 
     const finalHtml = applyLayout(
-    meta.title,
-    postHtml,
-    "../"
+        data.title || "Untitled",
+        postHtml,
+        "../"
     );
 
     const outputFileName = file.replace(".md", ".html");
@@ -110,9 +144,9 @@ files.forEach(file => {
     );
 
     postsMeta.push({
-        title: meta.title,
-        date: meta.date,
-        description: meta.description,
+        title: data.title,
+        date: data.date,
+        description: data.description,
         slug: outputFileName
     });
 
@@ -144,3 +178,50 @@ fs.writeFileSync(
 );
 
 console.log("Generated blog index.");
+/* =========================
+   GENERATE Projects
+========================= */
+
+// Generate project grid from GitHub API
+async function generateProjects() {
+
+    const repos = await fetchGitHubRepos();
+
+    const projectCards = repos.slice(0, 6).map(repo => `
+        <div class="project-card">
+            <h3>${repo.name}</h3>
+            <p>${repo.description || "No description provided."}</p>
+            <a href="${repo.html_url}" target="_blank" class="btn-small">
+                View Repository
+            </a>
+        </div>
+    `).join("");
+
+    const projectsPageContent = `
+        <section class="projects">
+            <div class="container">
+                <h1>Projects</h1>
+                <div class="project-grid">
+                    ${projectCards}
+                </div>
+            </div>
+        </section>
+    `;
+
+    const finalHtml = applyLayout(
+        "Projects",
+        projectsPageContent,
+        ""
+    );
+
+    fs.writeFileSync(
+        path.join(distDir, "projects.html"),
+        finalHtml
+    );
+
+    console.log("Generated projects from GitHub API.");
+}
+
+(async function build() {
+    await generateProjects();
+})();
