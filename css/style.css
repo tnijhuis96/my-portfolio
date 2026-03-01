@@ -14,7 +14,7 @@ body {
 }
 /* Navigation styling */
 header {
-    background: ##f4f4f4;
+    background: #f4f4f4;
     padding: 1rem 2rem;
     align-items: center;
 }
@@ -108,4 +108,62 @@ h2 {
 
 .btn-small:hover {
     background: #005fcc;
+}
+.btn-outline {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 2px solid #0077ff;
+    color: #0077ff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+    background: #0077ff;
+    color: white;
+}
+/* Projects Page */
+
+.projects-page h1 {
+    text-align: center;
+    margin-bottom: 3rem;
+    font-size: 2.5rem;
+}
+
+.projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+}
+
+.project-item {
+    background: #f9f9f9;
+    padding: 2.5rem;
+    border-radius: 10px;
+    transition: box-shadow 0.3s ease;
+}
+
+.project-item:hover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.project-item h2 {
+    margin-bottom: 1rem;
+}
+
+.project-description {
+    margin-bottom: 1rem;
+    color: #555;
+}
+
+.tech-stack {
+    margin-bottom: 1.5rem;
+    color: #444;
+}
+
+.project-links {
+    display: flex;
+    gap: 1rem;
 }
