@@ -1,0 +1,258 @@
+/* Reset default browser spacing*/
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+
+}
+title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+    text-align: center;
+    align-items: center;
+}
+/* Base body styling */
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    background-color: #f4f4f4;
+    color: #333;
+}
+/* Navigation styling */
+header {
+    background: #f4f4f4;
+    padding: 1rem 2rem;
+    align-items: center;
+}
+nav {
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+.nav-links {
+list-style: none;
+display: flex;
+gap: 1.5rem;
+}
+.nav-links a {
+    text-decoration: none;
+    color: #333;
+    font-weight: bold;
+}
+
+.nav-links a:hover {
+    color: #0077ff;
+}
+/* Global paragraph styling */
+p {
+    margin-bottom: 1rem;
+    color: #444;
+    font-size: 1rem;
+    text-align: center;
+    line-height: 1.6;
+}
+/* Hero section */
+.hero {
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 2rem;
+    background: #f4f4f4;
+    margin-top: 3rem;
+}
+
+/* Section spacing */
+section {
+    padding: 5rem 0;
+}
+h1 {
+    font-size: 3rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+h2 {
+    font-size: 2rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+.projects-grid,
+.posts-grid {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.project-card,
+.post-card {
+    background: #f9f9f9;
+    padding: 2rem;
+    border-radius: 8px;
+    width: 300px;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.project-card:hover,
+.post-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.project-card h3,
+.post-card h3 {
+    margin-bottom: 1rem;
+}
+
+.project-card p,
+.post-card p {
+    color: #666;
+    margin-bottom: 1.5rem;
+}
+.btn-small {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: #0077ff;
+    color: white;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+
+.btn-small:hover {
+    background: #005fcc;
+}
+.btn-outline {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 2px solid #0077ff;
+    color: #0077ff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+    background: #0077ff;
+    color: white;
+}
+/* Projects Page */
+
+.projects-page h1 {
+    text-align: center;
+    margin-bottom: 3rem;
+    font-size: 2.5rem;
+}
+
+.projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+}
+
+.project-item {
+    background: #f9f9f9;
+    padding: 2.5rem;
+    border-radius: 10px;
+    transition: box-shadow 0.3s ease;
+}
+
+.project-item:hover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.project-item h2 {
+    margin-bottom: 1rem;
+}
+
+.project-description {
+    margin-bottom: 1rem;
+    color: #555;
+}
+
+.tech-stack {
+    margin-bottom: 1.5rem;
+    color: #444;
+}
+
+.project-links {
+    display: flex;
+    gap: 1rem;
+}
+/* Blog Page */
+
+.blog-page h1 {
+    text-align: center;
+    margin-bottom: 3rem;
+    font-size: 2.5rem;
+}
+
+.blog-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+}
+
+.blog-preview {
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.blog-preview h2 {
+    margin-bottom: 0.5rem;
+}
+
+.post-meta {
+    font-size: 0.9rem;
+    color: #777;
+    margin-bottom: 1rem;
+}
+.blog-post p {
+    margin-bottom: 1.5rem;
+    color: #444;
+    line-height: 1.8;
+}
+
+/* =========================
+   Responsive Design
+========================= */
+
+@media (max-width: 768px) {
+nav {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .nav-links {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.8rem;
+    }
+    .projects-grid,
+    .posts-grid {
+        flex-direction: column;
+        align-items: center;
+    }
+    .hero {
+        padding: 4rem 1rem;
+    }
+
+    .hero h1 {
+        font-size: 2rem;
+    }
+
+    .hero p {
+        font-size: 1rem;
+    }
+    .project-links {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+}

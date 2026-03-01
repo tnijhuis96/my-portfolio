@@ -28,9 +28,10 @@ fs.copyFileSync(
     path.join(distDir, "css/style.css")
 );
 
-function applyLayout(title, content) {
+function applyLayout(title, content, basePath = "") {
     return layout
         .replace("{{title}}", title)
+        .replaceAll("{{basePath}}", basePath)
         .replace("{{content}}", content);
 }
 
@@ -48,7 +49,8 @@ pages.forEach(page => {
 
     const finalHtml = applyLayout(
         page.replace(".html", ""),
-        raw
+        raw,
+        ""
     );
 
     fs.writeFileSync(
@@ -94,7 +96,11 @@ files.forEach(file => {
         .replace("{{title}}", meta.title)
         .replace("{{content}}", htmlContent);
 
-    const finalHtml = applyLayout(meta.title, postHtml);
+    const finalHtml = applyLayout(
+    meta.title,
+    postHtml,
+    "../"
+    );
 
     const outputFileName = file.replace(".md", ".html");
 
@@ -122,13 +128,14 @@ const blogListHtml = postsMeta.map(post => `
     <h2>${post.title}</h2>
     <p>${post.date}</p>
     <p>${post.description}</p>
-    <a href="/blog/${post.slug}">Read More</a>
+    <a href="${post.slug}">Read More</a>
 </article>
 `).join("");
 
 const blogIndex = applyLayout(
     "Blog",
-    `<h1>Blog</h1>${blogListHtml}`
+    `<h1>Blog</h1>${blogListHtml}`,
+    "../"
 );
 
 fs.writeFileSync(

@@ -3,14 +3,18 @@
   "version": "1.0.0",
   "main": "build.js",
   "dependencies": {
-    "marked": "^17.0.3"
+    "marked": "^4.3.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "node build.js"
+    "build": "node build.js",
+    "deploy": "npm run build && gh-pages -d dist"
   },
   "keywords": [],
   "author": "Thomas Nijhuis",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
 }
