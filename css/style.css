@@ -1,0 +1,53 @@
+/* Reset default browser spacing*/
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+
+}
+/* Base body styling */
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    background-color: #f4f4f4;
+    color: #333;
+}
+/* Navigation styling */
+header {
+    background: #f4f4f4;
+    padding: 1rem 2rem;
+    align-items: center;
+}
+nav {
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+.nav-links {
+list-style: none;
+display: flex;
+gap: 1.5rem;
+}
+.nav-links a {
+    text-decoration: none;
+    color: #333;
+    font-weight: bold;
+}
+
+.nav-links a:hover {
+    color: #0077ff;
+}
+
+/* Hero section */
+.hero {
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 2rem;
+    background: #f4f4f4;
+    margin-top: 3rem;
+}
