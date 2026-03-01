@@ -2,41 +2,83 @@ const fs = require("fs");
 const path = require("path");
 const { marked } = require("marked");
 
-const postsDir = path.join(__dirname, "src/posts");
-const templatePath = path.join(__dirname, "src/templates/post.html");
-const blogIndexTemplate = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blog</title>
-    <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<main>
-    <section class="blog-page">
-        <div class="container">
-            <h1>Blog</h1>
-            {{posts}}
-        </div>
-    </section>
-</main>
-</body>
-</html>
-`;
+const srcDir = path.join(__dirname, "src");
+const distDir = path.join(__dirname, "dist");
 
-const distBlogDir = path.join(__dirname, "dist/blog");
-fs.mkdirSync(distBlogDir, { recursive: true });
+const postsDir = path.join(srcDir, "posts");
+const pagesDir = path.join(srcDir, "pages");
+const templatesDir = path.join(srcDir, "templates");
+const cssDir = path.join(srcDir, "css");
 
-const template = fs.readFileSync(templatePath, "utf-8");
+const layout = fs.readFileSync(
+    path.join(templatesDir, "layout.html"),
+    "utf-8"
+);
+
+// Clear dist
+if (fs.existsSync(distDir)) {
+    fs.rmSync(distDir, { recursive: true });
+}
+fs.mkdirSync(distDir);
+
+// Copy CSS
+fs.mkdirSync(path.join(distDir, "css"));
+fs.copyFileSync(
+    path.join(cssDir, "style.css"),
+    path.join(distDir, "css/style.css")
+);
+
+function applyLayout(title, content) {
+    return layout
+        .replace("{{title}}", title)
+        .replace("{{content}}", content);
+}
+
+/* =========================
+   GENERATE STATIC PAGES
+========================= */
+
+const pages = fs.readdirSync(pagesDir);
+
+pages.forEach(page => {
+    const raw = fs.readFileSync(
+        path.join(pagesDir, page),
+        "utf-8"
+    );
+
+    const finalHtml = applyLayout(
+        page.replace(".html", ""),
+        raw
+    );
+
+    fs.writeFileSync(
+        path.join(distDir, page),
+        finalHtml
+    );
+
+    console.log(`Generated page: ${page}`);
+});
+
+/* =========================
+   GENERATE BLOG POSTS
+========================= */
+
+const blogDir = path.join(distDir, "blog");
+fs.mkdirSync(blogDir);
+
+const postTemplate = fs.readFileSync(
+    path.join(templatesDir, "post.html"),
+    "utf-8"
+);
+
 const files = fs.readdirSync(postsDir);
-
 let postsMeta = [];
 
 files.forEach(file => {
-    const filePath = path.join(postsDir, file);
-    const raw = fs.readFileSync(filePath, "utf-8");
+    const raw = fs.readFileSync(
+        path.join(postsDir, file),
+        "utf-8"
+    );
 
     const [_, frontmatter, content] = raw.split("---");
 
@@ -48,14 +90,18 @@ files.forEach(file => {
 
     const htmlContent = marked(content);
 
-    const finalHtml = template
+    const postHtml = postTemplate
         .replace("{{title}}", meta.title)
         .replace("{{content}}", htmlContent);
 
-    const outputFileName = file.replace(".md", ".html");
-    const outputPath = path.join(distBlogDir, outputFileName);
+    const finalHtml = applyLayout(meta.title, postHtml);
 
-    fs.writeFileSync(outputPath, finalHtml);
+    const outputFileName = file.replace(".md", ".html");
+
+    fs.writeFileSync(
+        path.join(blogDir, outputFileName),
+        finalHtml
+    );
 
     postsMeta.push({
         title: meta.title,
@@ -67,26 +113,27 @@ files.forEach(file => {
     console.log(`Generated post: ${outputFileName}`);
 });
 
-
-// Sort posts by date (newest first)
+// Sort newest first
 postsMeta.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-
-// Generate blog listing
-const postsHtml = postsMeta.map(post => `
-<article class="blog-preview">
+// Generate blog index
+const blogListHtml = postsMeta.map(post => `
+<article>
     <h2>${post.title}</h2>
-    <p class="post-meta">${post.date}</p>
+    <p>${post.date}</p>
     <p>${post.description}</p>
-    <a href="/blog/${post.slug}" class="btn-small">Read More</a>
+    <a href="/blog/${post.slug}">Read More</a>
 </article>
 `).join("");
 
-const blogIndexHtml = blogIndexTemplate.replace("{{posts}}", postsHtml);
+const blogIndex = applyLayout(
+    "Blog",
+    `<h1>Blog</h1>${blogListHtml}`
+);
 
 fs.writeFileSync(
-    path.join(distBlogDir, "index.html"),
-    blogIndexHtml
+    path.join(blogDir, "index.html"),
+    blogIndex
 );
 
 console.log("Generated blog index.");
