@@ -8,15 +8,15 @@
             max-width: 700px;
             margin: 40px auto;
         }
-        input, textarea, select {
+        input, textarea {
             width: 100%;
             margin-bottom: 15px;
             padding: 10px;
         }
         button {
-            padding: 10px 20px;
+            padding: 8px 15px;
             cursor: pointer;
-            margin-right: 10px;
+            margin-right: 5px;
         }
         #status {
             margin-top: 15px;
@@ -26,6 +26,11 @@
         }
         .published {
             color: green;
+        }
+        .delete-btn {
+            background: #c0392b;
+            color: white;
+            border: none;
         }
     </style>
 </head>
@@ -45,15 +50,10 @@
 <input id="title" placeholder="Title" />
 <input id="description" placeholder="Short description" />
 <input id="tags" placeholder="Tags (comma separated)" />
-
-<select id="postStatus">
-    <option value="draft">Draft</option>
-    <option value="published">Published</option>
-</select>
-
 <textarea id="content" rows="12" placeholder="Markdown content"></textarea>
 
-<button onclick="savePost()">Save Post</button>
+<button onclick="savePost()">Save Draft</button>
+<button onclick="publishPost()">Publish</button>
 <button onclick="clearForm()">New Post</button>
 
 <p id="status"></p>
@@ -69,8 +69,8 @@ async function loadPosts() {
     posts.forEach(post => {
         const li = document.createElement("li");
 
-        const statusClass = post.status === "published" 
-            ? "published" 
+        const statusClass = post.status === "published"
+            ? "published"
             : "draft";
 
         li.innerHTML = `
@@ -79,6 +79,9 @@ async function loadPosts() {
                 (${post.status || "draft"})
             </span>
             <button onclick="editPost('${post.slug}')">Edit</button>
+            <button class="delete-btn" onclick="deletePost('${post.slug}')">
+                Delete
+            </button>
         `;
 
         list.appendChild(li);
@@ -94,7 +97,6 @@ async function editPost(slug) {
     document.getElementById("description").value = post.description;
     document.getElementById("tags").value = post.tags || "";
     document.getElementById("content").value = post.content;
-    document.getElementById("postStatus").value = post.status || "draft";
 }
 
 async function savePost() {
@@ -103,18 +105,66 @@ async function savePost() {
     const description = document.getElementById("description").value;
     const tags = document.getElementById("tags").value;
     const content = document.getElementById("content").value;
-    const status = document.getElementById("postStatus").value;
 
     const res = await fetch("/save-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, title, description, tags, content, status })
+        body: JSON.stringify({
+            slug,
+            title,
+            description,
+            tags,
+            content,
+            status: "draft"
+        })
     });
 
     const result = await res.json();
 
     document.getElementById("status").innerText =
-        result.success ? "Saved successfully!" : result.error;
+        result.success ? "Draft saved!" : result.error;
+
+    loadPosts();
+}
+
+async function publishPost() {
+    const slug = document.getElementById("slug").value;
+
+    if (!slug) {
+        document.getElementById("status").innerText =
+            "You must save the post before publishing.";
+        return;
+    }
+
+    const res = await fetch(`/publish/${slug}`, {
+        method: "POST"
+    });
+
+    const result = await res.json();
+
+    document.getElementById("status").innerText =
+        result.success ? "Post published!" : result.error;
+
+    loadPosts();
+}
+
+async function deletePost(slug) {
+    const confirmed = confirm("Are you sure you want to delete this post?");
+    if (!confirmed) return;
+
+    const res = await fetch(`/posts/${slug}`, {
+        method: "DELETE"
+    });
+
+    const result = await res.json();
+
+    document.getElementById("status").innerText =
+        result.success ? "Post deleted!" : result.error;
+
+    // If deleted post was open in editor, clear form
+    if (document.getElementById("slug").value === slug) {
+        clearForm();
+    }
 
     loadPosts();
 }
@@ -125,7 +175,6 @@ function clearForm() {
     document.getElementById("description").value = "";
     document.getElementById("tags").value = "";
     document.getElementById("content").value = "";
-    document.getElementById("postStatus").value = "draft";
 }
 
 loadPosts();
