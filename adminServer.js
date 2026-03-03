@@ -1,34 +1,85 @@
 require("dotenv").config();
-
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const matter = require("gray-matter");
 const { exec } = require("child_process");
+const session = require("express-session");
+const bcrypt = require("bcrypt");
 
 const app = express();
 const PORT = 3001;
 
-// Middleware
-app.use(express.json());
-app.use(express.static("admin"));
-
-// Ensure posts directory exists
 const postsDir = path.join(__dirname, "content/posts");
 
 if (!fs.existsSync(postsDir)) {
     fs.mkdirSync(postsDir, { recursive: true });
 }
 
-/* =========================
-   Helper: Get All Posts
-========================= */
+// =====================
+// Middleware
+// =====================
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(
+    session({
+        secret: process.env.SESSION_SECRET,
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false } // true only in HTTPS production
+    })
+);
+
+// =====================
+// Auth Middleware
+// =====================
+function requireAuth(req, res, next) {
+    if (req.session && req.session.authenticated) {
+        return next();
+    }
+    return res.status(401).json({ error: "Unauthorized" });
+}
+
+// =====================
+// Login Route
+// =====================
+app.post("/login", async (req, res) => {
+    const { password } = req.body;
+
+    const valid = await bcrypt.compare(
+        password,
+        process.env.CMS_PASSWORD_HASH
+    );
+
+    if (!valid) {
+        return res.status(401).json({ error: "Invalid password" });
+    }
+
+    req.session.authenticated = true;
+    res.json({ success: true });
+});
+
+// =====================
+// Logout
+// =====================
+app.post("/logout", (req, res) => {
+    req.session.destroy();
+    res.json({ success: true });
+});
+
+// =====================
+// Protected Routes
+// =====================
+
 function getAllPosts() {
     const files = fs.readdirSync(postsDir);
 
     return files.map(file => {
-        const filePath = path.join(postsDir, file);
-        const fileContent = fs.readFileSync(filePath, "utf-8");
+        const fileContent = fs.readFileSync(
+            path.join(postsDir, file),
+            "utf-8"
+        );
         const { data } = matter(fileContent);
 
         return {
@@ -40,20 +91,12 @@ function getAllPosts() {
     });
 }
 
-/* =========================
-   GET All Posts
-========================= */
-app.get("/posts", (req, res) => {
-    const posts = getAllPosts();
-    res.json(posts);
+app.get("/posts", requireAuth, (req, res) => {
+    res.json(getAllPosts());
 });
 
-/* =========================
-   GET Single Post
-========================= */
-app.get("/posts/:slug", (req, res) => {
-    const slug = req.params.slug;
-    const filePath = path.join(postsDir, `${slug}.md`);
+app.get("/posts/:slug", requireAuth, (req, res) => {
+    const filePath = path.join(postsDir, `${req.params.slug}.md`);
 
     if (!fs.existsSync(filePath)) {
         return res.status(404).json({ error: "Post not found" });
@@ -63,28 +106,21 @@ app.get("/posts/:slug", (req, res) => {
     const { data, content } = matter(fileContent);
 
     res.json({
-        slug,
-        title: data.title || "",
-        description: data.description || "",
-        date: data.date || "",
-        tags: data.tags || "",
+        slug: req.params.slug,
+        ...data,
         content
     });
 });
 
-/* =========================
-   CREATE or UPDATE Post
-========================= */
-app.post("/save-post", (req, res) => {
+app.post("/save-post", requireAuth, (req, res) => {
     const { slug, title, description, content, tags } = req.body;
 
     if (!title || !content) {
         return res.status(400).json({
-            error: "Title and content are required."
+            error: "Title and content required."
         });
     }
 
-    // Generate slug if new post
     const finalSlug = slug
         ? slug
         : title
@@ -102,30 +138,43 @@ tags: [${tags || ""}]
 ${content}
 `;
 
-    const filePath = path.join(postsDir, `${finalSlug}.md`);
+    fs.writeFileSync(
+        path.join(postsDir, `${finalSlug}.md`),
+        fileContent
+    );
 
-    fs.writeFileSync(filePath, fileContent);
-
-    // Automatically rebuild site
     exec("npm run build", (error) => {
         if (error) {
-            console.error("Build failed:", error);
             return res.status(500).json({
-                error: "Post saved but build failed."
+                error: "Build failed."
             });
         }
 
-        console.log("Site rebuilt successfully.");
-        res.json({
-            success: true,
-            slug: finalSlug
-        });
+        res.json({ success: true });
     });
 });
 
-/* =========================
-   Start Server
-========================= */
+// =====================
+// Serve Admin UI (Protected)
+// =====================
+app.get("/", (req, res) => {
+    if (req.session.authenticated) {
+        return res.redirect("/admin");
+    }
+    res.sendFile(path.join(__dirname, "admin/login.html"));
+});
+
+// Serve Admin Panel (Protected)
+app.get("/admin", (req, res) => {
+    if (!req.session.authenticated) {
+        return res.redirect("/");
+    }
+    res.sendFile(path.join(__dirname, "admin/blog-editor.html"));
+});
+
+// =====================
+// Start Server
+// =====================
 app.listen(PORT, () => {
     console.log(`CMS running at http://localhost:${PORT}`);
 });
