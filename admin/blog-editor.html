@@ -23,40 +23,77 @@
     </style>
 </head>
 <body>
+<h1>Blog CMS</h1>
 
-<h1>Create Blog Post</h1>
+<div>
+    <h2>Existing Posts</h2>
+    <ul id="postList"></ul>
+</div>
+
+<hr>
+
+<input type="hidden" id="slug" />
 
 <input id="title" placeholder="Title" />
 <input id="description" placeholder="Short description" />
 <input id="tags" placeholder="Tags (comma separated)" />
-<textarea id="content" rows="12" placeholder="Write your markdown content here..."></textarea>
+<textarea id="content" rows="12" placeholder="Markdown content"></textarea>
 
-<button onclick="submitPost()">Create Post</button>
+<button onclick="savePost()">Save Post</button>
 
 <p id="status"></p>
 
 <script>
-async function submitPost() {
+async function loadPosts() {
+    const res = await fetch("/posts");
+    const posts = await res.json();
+
+    const list = document.getElementById("postList");
+    list.innerHTML = "";
+
+    posts.forEach(post => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+            ${post.title} 
+            <button onclick="editPost('${post.slug}')">Edit</button>
+        `;
+        list.appendChild(li);
+    });
+}
+
+async function editPost(slug) {
+    const res = await fetch(`/posts/${slug}`);
+    const post = await res.json();
+
+    document.getElementById("slug").value = slug;
+    document.getElementById("title").value = post.title;
+    document.getElementById("description").value = post.description;
+    document.getElementById("tags").value = post.tags || "";
+    document.getElementById("content").value = post.content;
+}
+
+async function savePost() {
+    const slug = document.getElementById("slug").value;
     const title = document.getElementById("title").value;
     const description = document.getElementById("description").value;
     const tags = document.getElementById("tags").value;
     const content = document.getElementById("content").value;
 
-    const response = await fetch("/create-post", {
+    const res = await fetch("/save-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description, tags, content })
+        body: JSON.stringify({ slug, title, description, tags, content })
     });
 
-    const result = await response.json();
+    const result = await res.json();
 
-    const status = document.getElementById("status");
-    if (result.success) {
-        status.innerText = "✅ Post created successfully!";
-    } else {
-        status.innerText = "❌ Error: " + result.error;
-    }
+    document.getElementById("status").innerText =
+        result.success ? "Saved successfully!" : result.error;
+
+    loadPosts();
 }
+
+loadPosts();
 </script>
 
 </body>
