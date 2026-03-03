@@ -2,8 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-
 const app = express();
+const { exec } = require("child_process");
+
 app.use(express.json());
 app.use(express.static("admin"));
 
@@ -40,7 +41,16 @@ ${content}
 
     fs.writeFileSync(filePath, fileContent);
 
-    res.json({ success: true, message: "Post created successfully!" });
+// 🔥 Automatically rebuild site
+    exec("npm run build", (error, stdout, stderr) => {
+    if (error) {
+        console.error("Build failed:", error);
+        return res.status(500).json({ error: "Post created but build failed." });
+    }
+
+    console.log("Site rebuilt successfully.");
+    res.json({ success: true, message: "Post created and site rebuilt!" });
+});
 });
 
 app.listen(3001, () => {

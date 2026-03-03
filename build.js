@@ -22,7 +22,7 @@ if (typeof fetch === 'undefined') {
 const srcDir = path.join(__dirname, "src");
 const distDir = path.join(__dirname, "dist");
 
-const postsDir = path.join(srcDir, "posts");
+const postsDir = path.join(__dirname, "content/posts");
 const pagesDir = path.join(srcDir, "pages");
 const templatesDir = path.join(srcDir, "templates");
 const cssDir = path.join(srcDir, "css");
@@ -225,3 +225,6 @@ async function generateProjects() {
 (async function build() {
     await generateProjects();
 })();
+
+console.log("Reading posts from:", postsDir);
+console.log("Files found:", files);
