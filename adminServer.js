@@ -27,7 +27,7 @@ app.use(
         secret: process.env.SESSION_SECRET,
         resave: false,
         saveUninitialized: false,
-        cookie: { secure: false } // true only in HTTPS production
+        cookie: { secure: false }
     })
 );
 
@@ -69,9 +69,8 @@ app.post("/logout", (req, res) => {
 });
 
 // =====================
-// Protected Routes
+// Get All Posts
 // =====================
-
 function getAllPosts() {
     const files = fs.readdirSync(postsDir);
 
@@ -86,7 +85,8 @@ function getAllPosts() {
             slug: file.replace(".md", ""),
             title: data.title || "Untitled",
             date: data.date || "",
-            description: data.description || ""
+            description: data.description || "",
+            status: data.status || "draft"
         };
     });
 }
@@ -95,6 +95,9 @@ app.get("/posts", requireAuth, (req, res) => {
     res.json(getAllPosts());
 });
 
+// =====================
+// Get Single Post
+// =====================
 app.get("/posts/:slug", requireAuth, (req, res) => {
     const filePath = path.join(postsDir, `${req.params.slug}.md`);
 
@@ -112,8 +115,11 @@ app.get("/posts/:slug", requireAuth, (req, res) => {
     });
 });
 
+// =====================
+// Save Post (Draft by Default)
+// =====================
 app.post("/save-post", requireAuth, (req, res) => {
-    const { slug, title, description, content, tags } = req.body;
+    const { slug, title, description, content, tags, status } = req.body;
 
     if (!title || !content) {
         return res.status(400).json({
@@ -132,6 +138,7 @@ app.post("/save-post", requireAuth, (req, res) => {
 title: "${title}"
 description: "${description || ""}"
 date: "${new Date().toISOString()}"
+status: "${status || "draft"}"
 tags: [${tags || ""}]
 ---
 
@@ -155,7 +162,57 @@ ${content}
 });
 
 // =====================
-// Serve Admin UI (Protected)
+// Publish Post
+// =====================
+app.post("/publish/:slug", requireAuth, (req, res) => {
+    const filePath = path.join(postsDir, `${req.params.slug}.md`);
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "Post not found" });
+    }
+
+    const fileContent = fs.readFileSync(filePath, "utf-8");
+    const { data, content } = matter(fileContent);
+
+    data.status = "published";
+    data.date = new Date().toISOString();
+
+    const updatedContent = matter.stringify(content, data);
+
+    fs.writeFileSync(filePath, updatedContent);
+
+    exec("npm run build", (error) => {
+        if (error) {
+            return res.status(500).json({ error: "Build failed." });
+        }
+
+        res.json({ success: true });
+    });
+});
+
+// =====================
+// Delete Post
+// =====================
+app.delete("/posts/:slug", requireAuth, (req, res) => {
+    const filePath = path.join(postsDir, `${req.params.slug}.md`);
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "Post not found" });
+    }
+
+    fs.unlinkSync(filePath);
+
+    exec("npm run build", (error) => {
+        if (error) {
+            return res.status(500).json({ error: "Build failed." });
+        }
+
+        res.json({ success: true });
+    });
+});
+
+// =====================
+// Serve Admin UI
 // =====================
 app.get("/", (req, res) => {
     if (req.session.authenticated) {
@@ -164,7 +221,6 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "admin/login.html"));
 });
 
-// Serve Admin Panel (Protected)
 app.get("/admin", (req, res) => {
     if (!req.session.authenticated) {
         return res.redirect("/");

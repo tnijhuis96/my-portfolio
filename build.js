@@ -1,53 +1,54 @@
-require('dotenv').config();
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+const matter = require("gray-matter");
+const { marked } = require("marked");
+
+// =============================
+// Environment Validation
+// =============================
 function validateEnvironment() {
     if (!process.env.GITHUB_USERNAME) {
         throw new Error("❌ GITHUB_USERNAME missing in environment variables.");
     }
 
     if (!process.env.GITHUB_TOKEN) {
-        console.warn("⚠️ No GITHUB_TOKEN provided. Falling back to unauthenticated GitHub requests (rate limit: 60/hour).");
+        console.warn(
+            "⚠️ No GITHUB_TOKEN provided. Falling back to unauthenticated GitHub requests (rate limit: 60/hour)."
+        );
     }
 }
 validateEnvironment();
-const fs = require("fs");
-const path = require("path");
-const matter = require("gray-matter");
-const { marked } = require("marked");
 
-// Ensure fetch is available in Node.js (for Node < 18, use node-fetch)
-if (typeof fetch === 'undefined') {
-    global.fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+// Ensure fetch is available (Node < 18)
+if (typeof fetch === "undefined") {
+    global.fetch = (...args) =>
+        import("node-fetch").then(({ default: fetch }) => fetch(...args));
 }
 
+// =============================
+// Paths
+// =============================
 const srcDir = path.join(__dirname, "src");
 const distDir = path.join(__dirname, "dist");
-
 const postsDir = path.join(__dirname, "content/posts");
 const pagesDir = path.join(srcDir, "pages");
 const templatesDir = path.join(srcDir, "templates");
 const cssDir = path.join(srcDir, "css");
 
-const layout = fs.readFileSync(
-    path.join(templatesDir, "layout.html"),
-    "utf-8"
-);
-
-// Clear dist
-if (fs.existsSync(distDir)) {
-    fs.rmSync(distDir, { recursive: true });
+// =============================
+// Utilities
+// =============================
+function applyLayout(layout, title, content, basePath = "") {
+    return layout
+        .replace("{{title}}", title)
+        .replaceAll("{{basePath}}", basePath)
+        .replace("{{content}}", content);
 }
-fs.mkdirSync(distDir);
-
-// Copy CSS
-fs.mkdirSync(path.join(distDir, "css"));
-fs.copyFileSync(
-    path.join(cssDir, "style.css"),
-    path.join(distDir, "css/style.css")
-);
 
 async function fetchGitHubRepos() {
     const headers = {
-        "Accept": "application/vnd.github+json"
+        Accept: "application/vnd.github+json"
     };
 
     if (process.env.GITHUB_TOKEN) {
@@ -60,7 +61,9 @@ async function fetchGitHubRepos() {
     );
 
     if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+            `GitHub API error: ${response.status} ${response.statusText}`
+        );
     }
 
     const repos = await response.json();
@@ -69,146 +72,185 @@ async function fetchGitHubRepos() {
         .filter(repo => !repo.fork)
         .sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at));
 }
-function applyLayout(title, content, basePath = "") {
-    return layout
-        .replace("{{title}}", title)
-        .replaceAll("{{basePath}}", basePath)
-        .replace("{{content}}", content);
-}
 
-/* =========================
-   GENERATE STATIC PAGES
-========================= */
+// =============================
+// Main Build Function
+// =============================
+async function build() {
+    console.log("🚀 Starting build...");
 
-const pages = fs.readdirSync(pagesDir);
-
-pages.forEach(page => {
-    const raw = fs.readFileSync(
-        path.join(pagesDir, page),
+    // Load layout once
+    const layout = fs.readFileSync(
+        path.join(templatesDir, "layout.html"),
         "utf-8"
     );
 
-    const finalHtml = applyLayout(
-        page.replace(".html", ""),
-        raw,
-        ""
+    // Clear dist safely
+    if (fs.existsSync(distDir)) {
+        fs.rmSync(distDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(distDir, { recursive: true });
+
+    // Copy CSS
+    fs.mkdirSync(path.join(distDir, "css"), { recursive: true });
+    fs.copyFileSync(
+        path.join(cssDir, "style.css"),
+        path.join(distDir, "css/style.css")
     );
 
-    fs.writeFileSync(
-        path.join(distDir, page),
-        finalHtml
+    /* =========================
+       GENERATE STATIC PAGES
+    ========================= */
+
+    if (fs.existsSync(pagesDir)) {
+        const pages = fs.readdirSync(pagesDir);
+
+        pages.forEach(page => {
+            const raw = fs.readFileSync(
+                path.join(pagesDir, page),
+                "utf-8"
+            );
+
+            const finalHtml = applyLayout(
+                layout,
+                page.replace(".html", ""),
+                raw,
+                ""
+            );
+
+            fs.writeFileSync(
+                path.join(distDir, page),
+                finalHtml
+            );
+
+            console.log(`Generated page: ${page}`);
+        });
+    }
+
+    /* =========================
+       GENERATE BLOG POSTS
+    ========================= */
+
+    const blogDir = path.join(distDir, "blog");
+    fs.mkdirSync(blogDir, { recursive: true });
+
+    const postTemplate = fs.readFileSync(
+        path.join(templatesDir, "post.html"),
+        "utf-8"
     );
 
-    console.log(`Generated page: ${page}`);
-});
+    const files = fs.existsSync(postsDir)
+        ? fs.readdirSync(postsDir)
+        : [];
 
-/* =========================
-   GENERATE BLOG POSTS
-========================= */
+    let postsMeta = [];
 
-const blogDir = path.join(distDir, "blog");
-fs.mkdirSync(blogDir);
+    files.forEach(file => {
+        const fileContent = fs.readFileSync(
+            path.join(postsDir, file),
+            "utf-8"
+        );
 
-const postTemplate = fs.readFileSync(
-    path.join(templatesDir, "post.html"),
-    "utf-8"
-);
+        const { data, content } = matter(fileContent);
 
-const files = fs.readdirSync(postsDir);
-let postsMeta = [];
+        // Skip drafts
+        if (data.status !== "published") return;
 
-files.forEach(file => {
-    const filePath = path.join(postsDir, file);
-    const fileContent = fs.readFileSync(filePath, "utf-8");
+        const htmlContent = marked(content);
 
-    // ✅ Proper frontmatter parsing
-    const { data, content } = matter(fileContent);
+        const postHtml = postTemplate
+            .replace("{{title}}", data.title || "Untitled")
+            .replace("{{content}}", htmlContent);
 
-    const htmlContent = marked(content);
+        const finalHtml = applyLayout(
+            layout,
+            data.title || "Untitled",
+            postHtml,
+            "../"
+        );
 
-    const postHtml = postTemplate
-        .replace("{{title}}", data.title || "Untitled")
-        .replace("{{content}}", htmlContent);
+        const outputFileName = file.replace(".md", ".html");
 
-    const finalHtml = applyLayout(
-        data.title || "Untitled",
-        postHtml,
-        "../"
-    );
+        fs.writeFileSync(
+            path.join(blogDir, outputFileName),
+            finalHtml
+        );
 
-    const outputFileName = file.replace(".md", ".html");
+        postsMeta.push({
+            title: data.title || "Untitled",
+            date: data.date || "",
+            description: data.description || "",
+            slug: outputFileName
+        });
 
-    fs.writeFileSync(
-        path.join(blogDir, outputFileName),
-        finalHtml
-    );
-
-    postsMeta.push({
-        title: data.title,
-        date: data.date,
-        description: data.description,
-        slug: outputFileName
+        console.log(`Generated post: ${outputFileName}`);
     });
 
-    console.log(`Generated post: ${outputFileName}`);
-});
+    // Sort newest first (safe date handling)
+    postsMeta.sort(
+        (a, b) =>
+            new Date(b.date || 0) - new Date(a.date || 0)
+    );
 
-// Sort newest first
-postsMeta.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-// Generate blog index
-const blogListHtml = postsMeta.map(post => `
+    // Generate blog index
+    const blogListHtml = postsMeta
+        .map(
+            post => `
 <article>
     <h2>${post.title}</h2>
     <p>${post.date}</p>
     <p>${post.description}</p>
     <a href="${post.slug}">Read More</a>
-</article>
-`).join("");
+</article>`
+        )
+        .join("");
 
-const blogIndex = applyLayout(
-    "Blog",
-    `<h1>Blog</h1>${blogListHtml}`,
-    "../"
-);
+    const blogIndex = applyLayout(
+        layout,
+        "Blog",
+        `<h1>Blog</h1>${blogListHtml}`,
+        "../"
+    );
 
-fs.writeFileSync(
-    path.join(blogDir, "index.html"),
-    blogIndex
-);
+    fs.writeFileSync(
+        path.join(blogDir, "index.html"),
+        blogIndex
+    );
 
-console.log("Generated blog index.");
-/* =========================
-   GENERATE Projects
-========================= */
+    console.log("Generated blog index.");
 
-// Generate project grid from GitHub API
-async function generateProjects() {
+    /* =========================
+       GENERATE PROJECTS
+    ========================= */
 
     const repos = await fetchGitHubRepos();
 
-    const projectCards = repos.slice(0, 6).map(repo => `
-        <div class="project-card">
-            <h3>${repo.name}</h3>
-            <p>${repo.description || "No description provided."}</p>
-            <a href="${repo.html_url}" target="_blank" class="btn-small">
-                View Repository
-            </a>
-        </div>
-    `).join("");
+    const projectCards = repos
+        .slice(0, 6)
+        .map(
+            repo => `
+<div class="project-card">
+    <h3>${repo.name}</h3>
+    <p>${repo.description || "No description provided."}</p>
+    <a href="${repo.html_url}" target="_blank" class="btn-small">
+        View Repository
+    </a>
+</div>`
+        )
+        .join("");
 
     const projectsPageContent = `
-        <section class="projects">
-            <div class="container">
-                <h1>Projects</h1>
-                <div class="project-grid">
-                    ${projectCards}
-                </div>
-            </div>
-        </section>
-    `;
+<section class="projects">
+    <div class="container">
+        <h1>Projects</h1>
+        <div class="project-grid">
+            ${projectCards}
+        </div>
+    </div>
+</section>`;
 
-    const finalHtml = applyLayout(
+    const projectsHtml = applyLayout(
+        layout,
         "Projects",
         projectsPageContent,
         ""
@@ -216,15 +258,15 @@ async function generateProjects() {
 
     fs.writeFileSync(
         path.join(distDir, "projects.html"),
-        finalHtml
+        projectsHtml
     );
 
     console.log("Generated projects from GitHub API.");
+    console.log("✅ Build complete.");
 }
 
-(async function build() {
-    await generateProjects();
-})();
-
-console.log("Reading posts from:", postsDir);
-console.log("Files found:", files);
+// Run build
+build().catch(err => {
+    console.error("❌ Build failed:", err.message);
+    process.exit(1);
+});

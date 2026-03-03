@@ -8,7 +8,7 @@
             max-width: 700px;
             margin: 40px auto;
         }
-        input, textarea {
+        input, textarea, select {
             width: 100%;
             margin-bottom: 15px;
             padding: 10px;
@@ -16,13 +16,21 @@
         button {
             padding: 10px 20px;
             cursor: pointer;
+            margin-right: 10px;
         }
         #status {
             margin-top: 15px;
         }
+        .draft {
+            color: orange;
+        }
+        .published {
+            color: green;
+        }
     </style>
 </head>
 <body>
+
 <h1>Blog CMS</h1>
 
 <div>
@@ -37,9 +45,16 @@
 <input id="title" placeholder="Title" />
 <input id="description" placeholder="Short description" />
 <input id="tags" placeholder="Tags (comma separated)" />
+
+<select id="postStatus">
+    <option value="draft">Draft</option>
+    <option value="published">Published</option>
+</select>
+
 <textarea id="content" rows="12" placeholder="Markdown content"></textarea>
 
 <button onclick="savePost()">Save Post</button>
+<button onclick="clearForm()">New Post</button>
 
 <p id="status"></p>
 
@@ -53,10 +68,19 @@ async function loadPosts() {
 
     posts.forEach(post => {
         const li = document.createElement("li");
+
+        const statusClass = post.status === "published" 
+            ? "published" 
+            : "draft";
+
         li.innerHTML = `
-            ${post.title} 
+            <strong>${post.title}</strong> 
+            <span class="${statusClass}">
+                (${post.status || "draft"})
+            </span>
             <button onclick="editPost('${post.slug}')">Edit</button>
         `;
+
         list.appendChild(li);
     });
 }
@@ -70,6 +94,7 @@ async function editPost(slug) {
     document.getElementById("description").value = post.description;
     document.getElementById("tags").value = post.tags || "";
     document.getElementById("content").value = post.content;
+    document.getElementById("postStatus").value = post.status || "draft";
 }
 
 async function savePost() {
@@ -78,11 +103,12 @@ async function savePost() {
     const description = document.getElementById("description").value;
     const tags = document.getElementById("tags").value;
     const content = document.getElementById("content").value;
+    const status = document.getElementById("postStatus").value;
 
     const res = await fetch("/save-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, title, description, tags, content })
+        body: JSON.stringify({ slug, title, description, tags, content, status })
     });
 
     const result = await res.json();
@@ -91,6 +117,15 @@ async function savePost() {
         result.success ? "Saved successfully!" : result.error;
 
     loadPosts();
+}
+
+function clearForm() {
+    document.getElementById("slug").value = "";
+    document.getElementById("title").value = "";
+    document.getElementById("description").value = "";
+    document.getElementById("tags").value = "";
+    document.getElementById("content").value = "";
+    document.getElementById("postStatus").value = "draft";
 }
 
 loadPosts();
