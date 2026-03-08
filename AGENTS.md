@@ -14,6 +14,30 @@ When working on MVP2 tasks in this repository:
 - `npm run admin`
 - `npm run preview:dist`
 
+## MVP3 Guardrails
+When working on MVP3 tasks in this repository:
+
+1. Use `docs/mvp3/definition.md` as the canonical source of truth.
+2. Keep implementation within MVP3 scope:
+- Cloudflare Pages hosting setup for static output
+- domain/routing policy
+- edge security baseline
+- CI/CD and launch operations documentation
+3. Do not change backend logic or API contracts unless explicitly requested by the user.
+4. Keep `adminServer.js` private/local for MVP3; do not expose admin endpoints publicly as part of this milestone.
+5. If a locked MVP3 decision changes, update `docs/mvp3/decisions.md` first, then proceed with implementation.
+6. Update `docs/mvp3/tracker.md` whenever phase status changes.
+7. Ensure verification commands succeed after meaningful MVP3 changes:
+- `npm run build`
+- `npm run admin`
+- `npm run preview:dist`
+8. Include Cloudflare verification evidence in MVP3 docs for relevant phases:
+- production deploy from `master`
+- `www` -> apex redirect behavior
+- HTTPS/WAF/rate-limit posture
+- NL-only geo policy behavior
+9. Do not reintroduce `.env.example` dependency for MVP3; document variable names in docs without committing secret values.
+
 ## MVP Release Notes Governance
 When closing any MVP in this repository:
 
