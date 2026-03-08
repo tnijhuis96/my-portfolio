@@ -7,9 +7,11 @@ const { marked } = require("marked");
 // =============================
 // Environment Validation
 // =============================
-function validateEnvironment() {
+function validateProjectsEnvironment() {
     if (!process.env.GITHUB_USERNAME) {
-        throw new Error("❌ GITHUB_USERNAME missing in environment variables.");
+        throw new Error(
+            "GITHUB_USERNAME is required to build projects from GitHub. Set it in your environment or .env file."
+        );
     }
 
     if (!process.env.GITHUB_TOKEN) {
@@ -18,7 +20,6 @@ function validateEnvironment() {
         );
     }
 }
-validateEnvironment();
 
 // Ensure fetch is available (Node < 18)
 if (typeof fetch === "undefined") {
@@ -32,9 +33,28 @@ if (typeof fetch === "undefined") {
 const srcDir = path.join(__dirname, "src");
 const distDir = path.join(__dirname, "dist");
 const postsDir = path.join(__dirname, "content/posts");
+const legacyPostsDir = path.join(srcDir, "posts");
 const pagesDir = path.join(srcDir, "pages");
 const templatesDir = path.join(srcDir, "templates");
 const cssDir = path.join(srcDir, "css");
+
+function assertCanonicalPostSource() {
+    if (!fs.existsSync(legacyPostsDir)) {
+        return;
+    }
+
+    const legacyPostFiles = fs
+        .readdirSync(legacyPostsDir)
+        .filter(file => file.endsWith(".md"));
+
+    if (legacyPostFiles.length > 0) {
+        throw new Error(
+            `Legacy markdown files found in src/posts (${legacyPostFiles.join(
+                ", "
+            )}). Move all posts to content/posts and remove legacy files.`
+        );
+    }
+}
 
 // =============================
 // Utilities
@@ -78,6 +98,7 @@ async function fetchGitHubRepos() {
 // =============================
 async function build() {
     console.log("🚀 Starting build...");
+    assertCanonicalPostSource();
 
     // Load layout once
     const layout = fs.readFileSync(
@@ -222,6 +243,8 @@ async function build() {
     /* =========================
        GENERATE PROJECTS
     ========================= */
+
+     validateProjectsEnvironment();
 
     const repos = await fetchGitHubRepos();
 

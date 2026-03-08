@@ -9,12 +9,24 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "gray-matter": "^4.0.3",
-    "marked": "^4.3.0"
+    "marked": "^4.3.0",
+    "node-fetch": "^3.3.2"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "node build.js",
-    "deploy": "npm run build && gh-pages -d dist"
+    "admin": "node adminServer.js",
+    "preview": "npm run build && npx serve dist -l 4173",
+    "preview:dist": "npx serve dist -l 4173",
+    "backup:posts": "node scripts/backup-posts.js",
+    "backup:weekly:install": "node scripts/weekly-backup-cron.js install",
+    "backup:weekly:remove": "node scripts/weekly-backup-cron.js remove",
+    "backup:weekly:status": "node scripts/weekly-backup-cron.js status",
+    "backup:weekly:systemd:install": "node scripts/weekly-backup-systemd.js install",
+    "backup:weekly:systemd:remove": "node scripts/weekly-backup-systemd.js remove",
+    "backup:weekly:systemd:status": "node scripts/weekly-backup-systemd.js status",
+    "deploy": "npm run build",
+    "deploy:gh-pages": "npm run build && gh-pages -d dist"
   },
   "keywords": [],
   "author": "Thomas Nijhuis",

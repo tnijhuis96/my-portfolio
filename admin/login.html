@@ -7,12 +7,29 @@
 <p id="status"></p>
 
 <script>
+let csrfToken = "";
+
+async function loadCsrfToken() {
+    const res = await fetch("/csrf-token");
+    const result = await res.json();
+    csrfToken = result.csrfToken;
+}
+
 async function login() {
     const password = document.getElementById("password").value;
 
+    if (!csrfToken) {
+        document.getElementById("status").innerText =
+            "Unable to initialize security token. Refresh and try again.";
+        return;
+    }
+
     const res = await fetch("/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken
+        },
         body: JSON.stringify({ password })
     });
 
@@ -24,6 +41,8 @@ async function login() {
         document.getElementById("status").innerText = result.error;
     }
 }
+
+loadCsrfToken();
 </script>
 </body>
 </html>

@@ -59,8 +59,46 @@
 <p id="status"></p>
 
 <script>
+let csrfToken = "";
+
+async function loadCsrfToken() {
+    const res = await fetch("/csrf-token");
+
+    if (!res.ok) {
+        throw new Error("Failed to load CSRF token.");
+    }
+
+    const result = await res.json();
+    csrfToken = result.csrfToken;
+}
+
+async function apiFetch(url, options = {}) {
+    const method = (options.method || "GET").toUpperCase();
+    const headers = { ...(options.headers || {}) };
+
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        if (!csrfToken) {
+            await loadCsrfToken();
+        }
+
+        headers["X-CSRF-Token"] = csrfToken;
+    }
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
 async function loadPosts() {
-    const res = await fetch("/posts");
+    const res = await apiFetch("/posts");
+
+    if (!res.ok) {
+        document.getElementById("status").innerText =
+            "Failed to load posts. Please sign in again.";
+        return;
+    }
+
     const posts = await res.json();
 
     const list = document.getElementById("postList");
@@ -89,7 +127,13 @@ async function loadPosts() {
 }
 
 async function editPost(slug) {
-    const res = await fetch(`/posts/${slug}`);
+    const res = await apiFetch(`/posts/${slug}`);
+
+    if (!res.ok) {
+        document.getElementById("status").innerText = "Failed to load post.";
+        return;
+    }
+
     const post = await res.json();
 
     document.getElementById("slug").value = slug;
@@ -106,7 +150,7 @@ async function savePost() {
     const tags = document.getElementById("tags").value;
     const content = document.getElementById("content").value;
 
-    const res = await fetch("/save-post", {
+    const res = await apiFetch("/save-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -121,8 +165,9 @@ async function savePost() {
 
     const result = await res.json();
 
-    document.getElementById("status").innerText =
-        result.success ? "Draft saved!" : result.error;
+    document.getElementById("status").innerText = result.success
+        ? `Draft saved! ${result.deploy?.message || ""}`.trim()
+        : [result.error, result.details].filter(Boolean).join(" ");
 
     loadPosts();
 }
@@ -136,14 +181,15 @@ async function publishPost() {
         return;
     }
 
-    const res = await fetch(`/publish/${slug}`, {
+    const res = await apiFetch(`/publish/${slug}`, {
         method: "POST"
     });
 
     const result = await res.json();
 
-    document.getElementById("status").innerText =
-        result.success ? "Post published!" : result.error;
+    document.getElementById("status").innerText = result.success
+        ? `Post published! ${result.deploy?.message || ""}`.trim()
+        : [result.error, result.details].filter(Boolean).join(" ");
 
     loadPosts();
 }
@@ -152,14 +198,15 @@ async function deletePost(slug) {
     const confirmed = confirm("Are you sure you want to delete this post?");
     if (!confirmed) return;
 
-    const res = await fetch(`/posts/${slug}`, {
+    const res = await apiFetch(`/posts/${slug}`, {
         method: "DELETE"
     });
 
     const result = await res.json();
 
-    document.getElementById("status").innerText =
-        result.success ? "Post deleted!" : result.error;
+    document.getElementById("status").innerText = result.success
+        ? `Post deleted! ${result.deploy?.message || ""}`.trim()
+        : [result.error, result.details].filter(Boolean).join(" ");
 
     // If deleted post was open in editor, clear form
     if (document.getElementById("slug").value === slug) {
@@ -177,7 +224,17 @@ function clearForm() {
     document.getElementById("content").value = "";
 }
 
-loadPosts();
+async function initAdmin() {
+    try {
+        await loadCsrfToken();
+        await loadPosts();
+    } catch (error) {
+        document.getElementById("status").innerText =
+            "Failed to initialize admin session.";
+    }
+}
+
+initAdmin();
 </script>
 
 </body>
