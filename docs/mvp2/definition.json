@@ -1,0 +1,58 @@
+{
+  "milestone": "MVP2",
+  "state": "active",
+  "lastUpdated": "2026-03-08",
+  "vision": "Minimal, sleek, responsive visual redesign for portfolio + CMS while preserving behavior.",
+  "scope": {
+    "in": [
+      "design-system-tokens",
+      "public-site-visual-redesign",
+      "admin-separate-theme",
+      "responsive-refinement",
+      "accessibility-baseline",
+      "light-copy-tuning"
+    ],
+    "out": [
+      "backend-logic-changes",
+      "api-contract-changes",
+      "deployment-architecture-changes",
+      "non-visual-data-migration"
+    ]
+  },
+  "decisions": {
+    "brandVibe": "tech-forward-modern",
+    "typographyMood": "geometric-modern",
+    "fontStrategy": "one-heading-webfont-system-body",
+    "colorDirection": "teal-cyan-modern",
+    "contrastLevel": "soft",
+    "cornerStyle": "slightly-rounded",
+    "depthStyle": "subtle-shadows",
+    "motionIntensity": "expressive",
+    "mobileNavigationPattern": "compact-menu-button",
+    "heroTone": "personal-journey-story",
+    "projectsPresentation": "compact-data-focused",
+    "blogReadingStyle": "editorial-readable",
+    "adminStyling": "separate-theme",
+    "accessibilityPriority": "strong-baseline",
+    "scopeBoundary": "visual-plus-light-copy"
+  },
+  "references": [
+    "https://www.anthropic.com/",
+    "https://www.meetjamie.ai/",
+    "https://ellipsus.com/#introduction"
+  ],
+  "constraints": [
+    "preserve-routes-and-core-structure",
+    "preserve-build-and-cms-behavior",
+    "prefer-css-and-markup-over-js-logic-changes"
+  ],
+  "definitionOfDone": [
+    "tokenized-design-system-applied",
+    "public-site-redesigned",
+    "admin-separate-theme-applied",
+    "verified-breakpoints-360-768-1024-1280",
+    "focus-and-contrast-baseline-passed",
+    "build-and-admin-commands-working",
+    "tracker-and-decision-log-updated"
+  ]
+}

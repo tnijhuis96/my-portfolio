@@ -1,6 +1,7 @@
 # My Portfolio + Local CMS Documentation
 
 ## Quick navigation
+- [Active Milestone: MVP2](#active-milestone-mvp2)
 - [1) Project purpose](#1-project-purpose)
 - [2) High-level architecture (how data flows)](#2-high-level-architecture-how-data-flows)
 - [3) File-by-file documentation](#3-file-by-file-documentation)
@@ -14,6 +15,15 @@
 - [11) Command cheat sheet](#11-command-cheat-sheet)
 - [12) Environment variable reference](#12-environment-variable-reference)
 - [13) Current limitations and suggested next improvements](#13-current-limitations-and-suggested-next-improvements)
+
+## Active Milestone: MVP2
+To ensure consistency across models and sessions, MVP2 is governed by repository files (not chat history):
+
+- Definition (source of truth): `docs/mvp2/definition.md`
+- Machine-readable contract: `docs/mvp2/definition.json`
+- Execution tracker: `docs/mvp2/tracker.md`
+- Decision log (required for direction changes): `docs/mvp2/decisions.md`
+- Agent guardrails: `AGENTS.md`
 
 ## 1) Project purpose
 This repository contains:
