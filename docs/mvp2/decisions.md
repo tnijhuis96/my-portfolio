@@ -24,3 +24,12 @@ Record every MVP2 design-direction change here before implementation.
 - Alternatives considered: Keep decisions in chat history only.
 - Impacted files: `docs/mvp2/definition.md`, `docs/mvp2/tracker.md`, `docs/mvp2/definition.json`, `README.md`, `AGENTS.md`
 - Follow-up actions: Use this log for all future decision changes.
+
+### MVP2-002
+- Date: `2026-03-08`
+- Status: `accepted`
+- Decision: Close MVP2 as completed and synchronize documentation with implemented redesign outcomes.
+- Rationale: Ensure repository docs accurately represent shipped UI, accessibility baseline, and verified phase completion.
+- Alternatives considered: Leave docs as-is and rely on code history.
+- Impacted files: `README.md`, `docs/mvp2/definition.md`, `docs/mvp2/definition.json`, `docs/mvp2/tracker.md`, `docs/mvp2/decisions.md`
+- Follow-up actions: Treat future visual direction changes as post-MVP2 scope and log them as new decisions.

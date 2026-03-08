@@ -1,62 +1,282 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Minimal Blog CMS</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blog CMS</title>
     <style>
+        :root {
+            --admin-bg: #f4f3ef;
+            --admin-surface: #ffffff;
+            --admin-surface-soft: #f8f8f5;
+            --admin-border: #ddd8cf;
+            --admin-text: #1f2023;
+            --admin-muted: #64656c;
+            --admin-primary: #2f3749;
+            --admin-primary-hover: #252c3c;
+            --admin-secondary: #edeef2;
+            --admin-secondary-hover: #dde0e8;
+            --admin-success: #1f7a4d;
+            --admin-warning: #8c5a22;
+            --admin-danger: #aa3140;
+            --radius-md: 12px;
+            --radius-sm: 10px;
+            --shadow: 0 16px 36px rgba(20, 23, 31, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 700px;
-            margin: 40px auto;
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            color: var(--admin-text);
+            background:
+                radial-gradient(circle at top right, #ffffff 0%, transparent 36%),
+                radial-gradient(circle at bottom left, #edf0f8 0%, transparent 42%),
+                var(--admin-bg);
+            min-height: 100vh;
+            padding: 24px;
         }
-        input, textarea {
-            width: 100%;
-            margin-bottom: 15px;
+
+        .cms-shell {
+            width: min(100%, 980px);
+            margin: 0 auto;
+            display: grid;
+            gap: 18px;
+        }
+
+        .cms-header {
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow);
+            padding: 20px;
+        }
+
+        .cms-header h1 {
+            margin: 0 0 6px;
+            font-size: 30px;
+            line-height: 1.2;
+        }
+
+        .cms-subtitle {
+            margin: 0;
+            color: var(--admin-muted);
+        }
+
+        .cms-grid {
+            display: grid;
+            grid-template-columns: minmax(280px, 320px) 1fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        .panel {
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow);
+            padding: 18px;
+        }
+
+        .panel h2 {
+            margin: 0 0 14px;
+            font-size: 19px;
+        }
+
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        li {
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius-sm);
+            background: var(--admin-surface-soft);
             padding: 10px;
+            display: grid;
+            gap: 8px;
         }
-        button {
-            padding: 8px 15px;
-            cursor: pointer;
-            margin-right: 5px;
+
+        .post-line {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
         }
-        #status {
-            margin-top: 15px;
+
+        .post-title {
+            font-weight: 600;
+            margin: 0;
         }
+
+        .post-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+
         .draft {
-            color: orange;
+            color: var(--admin-warning);
+            background: #fdf3e2;
+            border-color: #eec994;
         }
+
         .published {
-            color: green;
+            color: var(--admin-success);
+            background: #e9f7ef;
+            border-color: #b6dfc5;
         }
+
+        label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--admin-muted);
+            margin: 4px 0 6px;
+            display: block;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            font: inherit;
+            color: inherit;
+            background: var(--admin-surface);
+        }
+
+        input:focus-visible,
+        textarea:focus-visible,
+        button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(47, 55, 73, 0.22);
+        }
+
+        textarea {
+            min-height: 280px;
+            resize: vertical;
+        }
+
+        button {
+            border: 1px solid transparent;
+            border-radius: 10px;
+            background: var(--admin-primary);
+            color: #ffffff;
+            font: inherit;
+            font-weight: 600;
+            padding: 9px 14px;
+            cursor: pointer;
+            transition: background-color 150ms ease;
+        }
+
+        button:hover {
+            background: var(--admin-primary-hover);
+        }
+
+        .ghost-btn {
+            background: var(--admin-secondary);
+            color: var(--admin-text);
+            border-color: var(--admin-border);
+        }
+
+        .ghost-btn:hover {
+            background: var(--admin-secondary-hover);
+        }
+
+        #status {
+            margin-top: 12px;
+            min-height: 20px;
+            font-size: 14px;
+            color: var(--admin-muted);
+        }
+
         .delete-btn {
-            background: #c0392b;
+            background: var(--admin-danger);
             color: white;
-            border: none;
+            border-color: transparent;
+        }
+
+        .delete-btn:hover {
+            background: #922533;
+        }
+
+        .editor-actions {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        @media (max-width: 900px) {
+            .cms-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .post-line {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>
 <body>
 
-<h1>Blog CMS</h1>
+<main class="cms-shell">
+    <header class="cms-header">
+        <h1>Blog CMS Workspace</h1>
+        <p class="cms-subtitle">Draft, publish, and maintain portfolio writing from one place.</p>
+    </header>
 
-<div>
-    <h2>Existing Posts</h2>
-    <ul id="postList"></ul>
-</div>
+    <section class="cms-grid">
+        <aside class="panel">
+            <h2>Existing Posts</h2>
+            <ul id="postList"></ul>
+        </aside>
 
-<hr>
+        <section class="panel">
+            <h2>Editor</h2>
+            <input type="hidden" id="slug" />
 
-<input type="hidden" id="slug" />
+            <label for="title">Title</label>
+            <input id="title" placeholder="Title" />
 
-<input id="title" placeholder="Title" />
-<input id="description" placeholder="Short description" />
-<input id="tags" placeholder="Tags (comma separated)" />
-<textarea id="content" rows="12" placeholder="Markdown content"></textarea>
+            <label for="description">Short description</label>
+            <input id="description" placeholder="Short description" />
 
-<button onclick="savePost()">Save Draft</button>
-<button onclick="publishPost()">Publish</button>
-<button onclick="clearForm()">New Post</button>
+            <label for="tags">Tags (comma separated)</label>
+            <input id="tags" placeholder="Tags (comma separated)" />
 
-<p id="status"></p>
+            <label for="content">Markdown content</label>
+            <textarea id="content" rows="12" placeholder="Markdown content"></textarea>
+
+            <div class="editor-actions">
+                <button type="button" onclick="savePost()">Save Draft</button>
+                <button type="button" onclick="publishPost()">Publish</button>
+                <button type="button" class="ghost-btn" onclick="clearForm()">New Post</button>
+            </div>
+
+            <p id="status" role="status" aria-live="polite"></p>
+        </section>
+    </section>
+</main>
 
 <script>
 let csrfToken = "";
@@ -112,14 +332,14 @@ async function loadPosts() {
             : "draft";
 
         li.innerHTML = `
-            <strong>${post.title}</strong> 
-            <span class="${statusClass}">
-                (${post.status || "draft"})
-            </span>
-            <button onclick="editPost('${post.slug}')">Edit</button>
-            <button class="delete-btn" onclick="deletePost('${post.slug}')">
-                Delete
-            </button>
+            <div class="post-line">
+                <p class="post-title">${post.title}</p>
+                <span class="badge ${statusClass}">${post.status || "draft"}</span>
+            </div>
+            <div class="post-actions">
+                <button class="ghost-btn" onclick="editPost('${post.slug}')">Edit</button>
+                <button class="delete-btn" onclick="deletePost('${post.slug}')">Delete</button>
+            </div>
         `;
 
         list.appendChild(li);

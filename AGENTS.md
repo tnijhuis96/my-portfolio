@@ -13,3 +13,17 @@ When working on MVP2 tasks in this repository:
 - `npm run build`
 - `npm run admin`
 - `npm run preview:dist`
+
+## MVP Release Notes Governance
+When closing any MVP in this repository:
+
+1. Use `docs/releases/` as the canonical release-notes location.
+2. Maintain required release files:
+- `docs/releases/README.md` for release index and navigation
+- `docs/releases/mvp-XXX.md` for per-MVP release notes
+- `docs/releases/_template.md` as the source template for new release notes
+3. Follow mandatory closeout flow before calling an MVP complete:
+- Create or update the relevant `docs/releases/mvp-XXX.md`
+- Link the MVP release note from `docs/releases/README.md`
+- Ensure the corresponding `docs/mvpX/tracker.md` reflects the same completion state
+4. If release documentation structure changes, update top-level `README.md` quick links in the same change.

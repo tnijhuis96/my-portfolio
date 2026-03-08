@@ -7,46 +7,172 @@
     <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
-<header>
-    <nav>
-        <a href="../index.html">Home</a>
-        <a href="../projects.html">Projects</a>
-        <a href="../blog/">Blog</a>
+<header class="site-header">
+    <nav class="site-nav">
+        <a href="../index.html" class="site-logo">TN</a>
+        <button
+            class="menu-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="site-nav-links"
+            aria-label="Toggle navigation"
+        >
+            Menu
+        </button>
+        <div class="nav-links" id="site-nav-links">
+            <a href="../index.html">Home</a>
+            <a href="../projects.html">Projects</a>
+            <a href="../blog/">Blog</a>
+        </div>
     </nav>
 </header>
 
-<main>
-    <h1>Blog</h1>
-<article>
-    <h2>This is my first blog post via my own blog CMS system</h2>
-    <p>2026-03-08T10:42:02.651Z</p>
+<main id="main-content" tabindex="-1">
+    <section class="blog-index"><h1>Blog</h1><p class="blog-index-intro">Thoughts, project breakdowns, and lessons from shipping software every week.</p>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>Delivered MVP 2!</h2>
+        <div class="blog-teaser-meta">
+            <span>Mar 8, 2026</span>
+            <span>2 min read</span>
+        </div>
+    </div>
+    <p>Github Copilot and I redesigned the look and feel of the entire website</p>
+    <a href="delivered-mvp-2.html" class="btn-small">Read Article</a>
+</article>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>Delivered MVP 1</h2>
+        <div class="blog-teaser-meta">
+            <span>Mar 8, 2026</span>
+            <span>2 min read</span>
+        </div>
+    </div>
+    <p>Github Copilot and I delivered an MVP 1 for the portfolio site</p>
+    <a href="delivered-mvp-1.html" class="btn-small">Read Article</a>
+</article>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>This is my first blog post via my own blog CMS system</h2>
+        <div class="blog-teaser-meta">
+            <span>Mar 8, 2026</span>
+            <span>1 min read</span>
+        </div>
+    </div>
     <p>CMS System integrations</p>
-    <a href="this-is-my-first-blog-post-via-my-own-blog-cms-system.html">Read More</a>
+    <a href="this-is-my-first-blog-post-via-my-own-blog-cms-system.html" class="btn-small">Read Article</a>
 </article>
-<article>
-    <h2>Fixed the CMS integration</h2>
-    <p>2026-03-08T10:41:49.273Z</p>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>Fixed the CMS integration</h2>
+        <div class="blog-teaser-meta">
+            <span>Mar 8, 2026</span>
+            <span>1 min read</span>
+        </div>
+    </div>
     <p>Changing the path in build.js solved the file origin error</p>
-    <a href="fixed-the-cms-integration.html">Read More</a>
+    <a href="fixed-the-cms-integration.html" class="btn-small">Read Article</a>
 </article>
-<article>
-    <h2>My second post</h2>
-    <p>2026-03-01</p>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>My second post</h2>
+        <div class="blog-teaser-meta">
+            <span>Mar 1, 2026</span>
+            <span>1 min read</span>
+        </div>
+    </div>
     <p>I upgraded my website from manuel to static generated.</p>
-    <a href="post-2.html">Read More</a>
+    <a href="post-2.html" class="btn-small">Read Article</a>
 </article>
-<article>
-    <h2>My First Markdown Post</h2>
-    <p>2026-01-10</p>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>My First Markdown Post</h2>
+        <div class="blog-teaser-meta">
+            <span>Jan 10, 2026</span>
+            <span>1 min read</span>
+        </div>
+    </div>
     <p>Why I moved my blog to a custom static generator.</p>
-    <a href="first-post.html">Read More</a>
-</article>
+    <a href="first-post.html" class="btn-small">Read Article</a>
+</article></section>
 </main>
 
 <footer>
     <p>© 2026 Thomas Nijhuis</p>
 </footer>
+
+<script>
+(() => {
+    const menuButton = document.querySelector(".menu-toggle");
+    const navLinks = document.getElementById("site-nav-links");
+    const navAnchors = navLinks
+        ? Array.from(navLinks.querySelectorAll("a"))
+        : [];
+
+    const normalizePath = pathname => {
+        let path = pathname || "/";
+
+        if (path.endsWith("/index.html")) {
+            path = path.slice(0, -"index.html".length);
+        }
+
+        path = path.replace(/\/+$/, "");
+        return path || "/";
+    };
+
+    const currentPath = normalizePath(window.location.pathname);
+
+    navAnchors.forEach(link => {
+        const linkPath = normalizePath(new URL(link.href).pathname);
+        const isBlogLink = linkPath.endsWith("/blog");
+        const isCurrent =
+            currentPath === linkPath ||
+            (isBlogLink && currentPath.startsWith("/blog"));
+
+        if (isCurrent) {
+            link.setAttribute("aria-current", "page");
+        }
+    });
+
+    if (!menuButton || !navLinks) {
+        return;
+    }
+
+    menuButton.addEventListener("click", () => {
+        const expanded = menuButton.getAttribute("aria-expanded") === "true";
+        menuButton.setAttribute("aria-expanded", String(!expanded));
+        navLinks.classList.toggle("is-open", !expanded);
+    });
+
+    navLinks.addEventListener("click", event => {
+        if (event.target.tagName !== "A") {
+            return;
+        }
+
+        if (window.innerWidth <= 768) {
+            menuButton.setAttribute("aria-expanded", "false");
+            navLinks.classList.remove("is-open");
+        }
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            menuButton.setAttribute("aria-expanded", "false");
+            navLinks.classList.remove("is-open");
+            menuButton.focus();
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 768) {
+            menuButton.setAttribute("aria-expanded", "false");
+            navLinks.classList.remove("is-open");
+        }
+    });
+})();
+</script>
 
 </body>
 </html>

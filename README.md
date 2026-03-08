@@ -1,7 +1,8 @@
 # My Portfolio + Local CMS Documentation
 
 ## Quick navigation
-- [Active Milestone: MVP2](#active-milestone-mvp2)
+- [MVP2 Status](#mvp2-status)
+- [MVP Release Notes](#mvp-release-notes)
 - [1) Project purpose](#1-project-purpose)
 - [2) High-level architecture (how data flows)](#2-high-level-architecture-how-data-flows)
 - [3) File-by-file documentation](#3-file-by-file-documentation)
@@ -16,7 +17,9 @@
 - [12) Environment variable reference](#12-environment-variable-reference)
 - [13) Current limitations and suggested next improvements](#13-current-limitations-and-suggested-next-improvements)
 
-## Active Milestone: MVP2
+## MVP2 Status
+MVP2 is complete as of `2026-03-08`.
+
 To ensure consistency across models and sessions, MVP2 is governed by repository files (not chat history):
 
 - Definition (source of truth): `docs/mvp2/definition.md`
@@ -24,6 +27,20 @@ To ensure consistency across models and sessions, MVP2 is governed by repository
 - Execution tracker: `docs/mvp2/tracker.md`
 - Decision log (required for direction changes): `docs/mvp2/decisions.md`
 - Agent guardrails: `AGENTS.md`
+
+### MVP2 implementation outcomes (final)
+- Tokenized visual system in `src/css/style.css` (colors, spacing, typography scale, shadows, motion).
+- Public layout refresh: compact menu, skip-link, keyboard-close behavior, and responsive nav in `src/templates/layout.html`.
+- Homepage tone/copy and hero hierarchy updated in `src/pages/index.html`.
+- Projects cards redesigned with metadata and generated GitHub cards improved in `build.js`.
+- Blog readability improvements: post description, formatted date, read-time, editorial content rhythm via `src/templates/post.html` and `build.js`.
+- Separate admin design language completed in `admin/login.html` and `admin/blog-editor.html`.
+- Accessibility baseline hardening: visible focus states, touch-target minimums, reduced-motion handling, live regions, keyboard interaction patterns.
+- Verification completed with `npm run build`, `npm run admin`, and `npm run preview:dist`.
+
+## MVP Release Notes
+- Canonical index: `docs/releases/README.md`
+- Template for new notes: `docs/releases/_template.md`
 
 ## 1) Project purpose
 This repository contains:
@@ -102,6 +119,14 @@ The generated site output is written to `dist/`.
 - `applyLayout(layout, title, content, basePath = "")`
   - Injects page values into `layout.html` placeholders (`{{title}}`, `{{basePath}}`, `{{content}}`).
   - Used by all generated pages.
+
+- `formatDate(dateValue)`
+  - Formats dates into readable output (for example `Mar 8, 2026`).
+  - Returns `Undated` for missing/invalid values.
+
+- `estimateReadTime(markdownContent)`
+  - Estimates reading duration from markdown word count.
+  - Used in generated blog metadata.
 
 - `fetchGitHubRepos()`
   - Calls GitHub API to fetch repositories for the configured user.
@@ -324,6 +349,8 @@ Files currently in use:
 **What it does**
 - Shared HTML shell for all pages.
 - Placeholders replaced by `applyLayout()` in `build.js`.
+- Contains UI-only navigation behavior for mobile menu toggle, Escape-to-close, and active-link (`aria-current`) detection.
+- Includes global skip-link + main landmark structure used by generated pages.
 
 **Functions called in this file**
 - None directly (template consumed by `applyLayout`).
@@ -333,7 +360,7 @@ Files currently in use:
 ### `src/templates/post.html`
 **What it does**
 - Blog post content fragment template.
-- Receives `{{title}}` + `{{content}}` from `build.js` before insertion into layout.
+- Receives `{{title}}`, `{{description}}`, `{{date}}`, `{{readingTime}}`, and `{{content}}` from `build.js`.
 
 **Functions called in this file**
 - None directly.
@@ -342,7 +369,8 @@ Files currently in use:
 
 ### `src/css/style.css`
 **What it does**
-- Global site styling: layout, nav, hero, buttons, project cards, responsive rules.
+- Token-driven public design system and component styling.
+- Includes responsive behavior for 480/768/1024/1280 breakpoints, skip-link/focus states, and reduced-motion fallback.
 
 **Functions called in this file**
 - None (CSS only).

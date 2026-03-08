@@ -1,10 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CMS Login</title>
+    <style>
+        :root {
+            --admin-bg: #f7f5f2;
+            --admin-surface: #ffffff;
+            --admin-border: #ddd7cf;
+            --admin-text: #1f2023;
+            --admin-muted: #63646b;
+            --admin-primary: #2f3749;
+            --admin-primary-hover: #252c3c;
+            --admin-accent: #d6e4ff;
+            --admin-danger: #ab2f3d;
+            --radius: 12px;
+            --shadow: 0 16px 35px rgba(20, 23, 31, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top right, #ffffff 0%, transparent 35%),
+                radial-gradient(circle at bottom left, #eef2ff 0%, transparent 40%),
+                var(--admin-bg);
+            color: var(--admin-text);
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .login-card {
+            width: min(100%, 420px);
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius);
+            padding: 28px;
+            box-shadow: var(--shadow);
+        }
+
+        .eyebrow {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--admin-muted);
+            background: var(--admin-accent);
+            border-radius: 999px;
+            padding: 6px 10px;
+            margin-bottom: 14px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            margin: 0 0 20px;
+            color: var(--admin-muted);
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            border: 1px solid var(--admin-border);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font: inherit;
+            margin-bottom: 14px;
+        }
+
+        input:focus-visible,
+        button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(47, 55, 73, 0.22);
+        }
+
+        button {
+            width: 100%;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font: inherit;
+            font-weight: 600;
+            color: #ffffff;
+            background: var(--admin-primary);
+            cursor: pointer;
+            transition: background-color 160ms ease;
+        }
+
+        button:hover {
+            background: var(--admin-primary-hover);
+        }
+
+        #status {
+            margin: 14px 0 0;
+            min-height: 20px;
+            font-size: 14px;
+            color: var(--admin-danger);
+        }
+    </style>
+</head>
 <body>
-<h2>Admin Login</h2>
-<input type="password" id="password" placeholder="Enter password" />
-<button onclick="login()">Login</button>
-<p id="status"></p>
+<section class="login-card">
+    <span class="eyebrow">Portfolio CMS</span>
+    <h1>Welcome back</h1>
+    <p class="subtitle">Sign in to manage your blog posts and updates.</p>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" placeholder="Enter password" autocomplete="current-password" />
+    <button onclick="login()">Sign in</button>
+    <p id="status" role="status" aria-live="polite"></p>
+</section>
 
 <script>
 let csrfToken = "";
@@ -43,6 +166,12 @@ async function login() {
 }
 
 loadCsrfToken();
+
+document.getElementById("password").addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        login();
+    }
+});
 </script>
 </body>
 </html>

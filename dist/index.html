@@ -7,23 +7,39 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
-<header>
-    <nav>
-        <a href="index.html">Home</a>
-        <a href="projects.html">Projects</a>
-        <a href="blog/">Blog</a>
+<header class="site-header">
+    <nav class="site-nav">
+        <a href="index.html" class="site-logo">TN</a>
+        <button
+            class="menu-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="site-nav-links"
+            aria-label="Toggle navigation"
+        >
+            Menu
+        </button>
+        <div class="nav-links" id="site-nav-links">
+            <a href="index.html">Home</a>
+            <a href="projects.html">Projects</a>
+            <a href="blog/">Blog</a>
+        </div>
     </nav>
 </header>
 
-<main>
+<main id="main-content" tabindex="-1">
     <section class="hero">
     <div class="container">
-        <h1>Hi, I'm Thomas 👋</h1>
+        <p class="hero-kicker">Learning in public since 2026</p>
+        <h1>Hi, I'm Thomas. I build, test, and ship every week.</h1>
         <p>
-            I'm documenting my journey into software development,
-            building real projects and improving every week.
+            This portfolio tracks my journey into software development,
+            from experiments to finished projects and practical lessons learned.
         </p>
+
+        <p class="hero-microcopy">Current focus: clean architecture, UI systems, and reliable shipping habits.</p>
 
         <div class="hero-buttons">
             <a href="projects.html" class="btn">View Projects</a>
@@ -36,6 +52,77 @@
 <footer>
     <p>© 2026 Thomas Nijhuis</p>
 </footer>
+
+<script>
+(() => {
+    const menuButton = document.querySelector(".menu-toggle");
+    const navLinks = document.getElementById("site-nav-links");
+    const navAnchors = navLinks
+        ? Array.from(navLinks.querySelectorAll("a"))
+        : [];
+
+    const normalizePath = pathname => {
+        let path = pathname || "/";
+
+        if (path.endsWith("/index.html")) {
+            path = path.slice(0, -"index.html".length);
+        }
+
+        path = path.replace(/\/+$/, "");
+        return path || "/";
+    };
+
+    const currentPath = normalizePath(window.location.pathname);
+
+    navAnchors.forEach(link => {
+        const linkPath = normalizePath(new URL(link.href).pathname);
+        const isBlogLink = linkPath.endsWith("/blog");
+        const isCurrent =
+            currentPath === linkPath ||
+            (isBlogLink && currentPath.startsWith("/blog"));
+
+        if (isCurrent) {
+            link.setAttribute("aria-current", "page");
+        }
+    });
+
+    if (!menuButton || !navLinks) {
+        return;
+    }
+
+    menuButton.addEventListener("click", () => {
+        const expanded = menuButton.getAttribute("aria-expanded") === "true";
+        menuButton.setAttribute("aria-expanded", String(!expanded));
+        navLinks.classList.toggle("is-open", !expanded);
+    });
+
+    navLinks.addEventListener("click", event => {
+        if (event.target.tagName !== "A") {
+            return;
+        }
+
+        if (window.innerWidth <= 768) {
+            menuButton.setAttribute("aria-expanded", "false");
+            navLinks.classList.remove("is-open");
+        }
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            menuButton.setAttribute("aria-expanded", "false");
+            navLinks.classList.remove("is-open");
+            menuButton.focus();
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 768) {
+            menuButton.setAttribute("aria-expanded", "false");
+            navLinks.classList.remove("is-open");
+        }
+    });
+})();
+</script>
 
 </body>
 </html>

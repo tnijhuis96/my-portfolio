@@ -66,6 +66,30 @@ function applyLayout(layout, title, content, basePath = "") {
         .replace("{{content}}", content);
 }
 
+function formatDate(dateValue) {
+    if (!dateValue) {
+        return "Undated";
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+        return "Undated";
+    }
+
+    return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
+}
+
+function estimateReadTime(markdownContent) {
+    const wordCount = markdownContent.trim().split(/\s+/).length;
+    const minutes = Math.max(1, Math.ceil(wordCount / 220));
+    return `${minutes} min read`;
+}
+
 async function fetchGitHubRepos() {
     const headers = {
         Accept: "application/vnd.github+json"
@@ -178,9 +202,14 @@ async function build() {
         if (data.status !== "published") return;
 
         const htmlContent = marked(content);
+        const formattedDate = formatDate(data.date);
+        const readingTime = estimateReadTime(content);
 
         const postHtml = postTemplate
             .replace("{{title}}", data.title || "Untitled")
+            .replace("{{description}}", data.description || "")
+            .replace("{{date}}", formattedDate)
+            .replace("{{readingTime}}", readingTime)
             .replace("{{content}}", htmlContent);
 
         const finalHtml = applyLayout(
@@ -200,7 +229,9 @@ async function build() {
         postsMeta.push({
             title: data.title || "Untitled",
             date: data.date || "",
+            formattedDate,
             description: data.description || "",
+            readingTime,
             slug: outputFileName
         });
 
@@ -217,11 +248,16 @@ async function build() {
     const blogListHtml = postsMeta
         .map(
             post => `
-<article>
-    <h2>${post.title}</h2>
-    <p>${post.date}</p>
-    <p>${post.description}</p>
-    <a href="${post.slug}">Read More</a>
+<article class="blog-teaser">
+    <div class="blog-teaser-top">
+        <h2>${post.title}</h2>
+        <div class="blog-teaser-meta">
+            <span>${post.formattedDate}</span>
+            <span>${post.readingTime}</span>
+        </div>
+    </div>
+    <p>${post.description || "No summary provided yet."}</p>
+    <a href="${post.slug}" class="btn-small">Read Article</a>
 </article>`
         )
         .join("");
@@ -229,7 +265,7 @@ async function build() {
     const blogIndex = applyLayout(
         layout,
         "Blog",
-        `<h1>Blog</h1>${blogListHtml}`,
+        `<section class="blog-index"><h1>Blog</h1><p class="blog-index-intro">Thoughts, project breakdowns, and lessons from shipping software every week.</p>${blogListHtml}</section>`,
         "../"
     );
 
@@ -253,11 +289,20 @@ async function build() {
         .map(
             repo => `
 <div class="project-card">
-    <h3>${repo.name}</h3>
+    <div class="project-card-top">
+        <h3>${repo.name}</h3>
+        <div class="project-meta">
+            <span>Language: ${repo.language || "n/a"}</span>
+            <span>Stars: ${repo.stargazers_count || 0}</span>
+        </div>
+    </div>
     <p>${repo.description || "No description provided."}</p>
-    <a href="${repo.html_url}" target="_blank" class="btn-small">
-        View Repository
-    </a>
+    <div class="project-card-actions">
+        <span class="project-updated">Updated ${formatDate(repo.pushed_at)}</span>
+        <a href="${repo.html_url}" target="_blank" rel="noopener noreferrer" class="btn-small">
+            Repository
+        </a>
+    </div>
 </div>`
         )
         .join("");

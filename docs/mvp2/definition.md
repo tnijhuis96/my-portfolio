@@ -2,8 +2,14 @@
 
 ## Status
 - Milestone: `MVP2`
-- State: `Active`
+- State: `Completed`
 - Last updated: `2026-03-08`
+
+## Completion note
+MVP2 implementation is complete and verified through:
+- `npm run build`
+- `npm run admin`
+- `npm run preview:dist`
 
 ## Vision
 Create a minimal, sleek, responsive visual redesign for the portfolio + CMS, while preserving all current backend behavior and content flow.
