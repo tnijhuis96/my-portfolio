@@ -16,7 +16,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "node build.js",
     "admin": "node adminServer.js",
-    "preview": "npm run build && npx serve dist -l 4173",
+    "preview": "wrangler dev",
     "preview:dist": "npx serve dist -l 4173",
     "backup:posts": "node scripts/backup-posts.js",
     "backup:weekly:install": "node scripts/weekly-backup-cron.js install",
@@ -25,7 +25,7 @@
     "backup:weekly:systemd:install": "node scripts/weekly-backup-systemd.js install",
     "backup:weekly:systemd:remove": "node scripts/weekly-backup-systemd.js remove",
     "backup:weekly:systemd:status": "node scripts/weekly-backup-systemd.js status",
-    "deploy": "npm run build",
+    "deploy": "wrangler deploy",
     "deploy:gh-pages": "npm run build && gh-pages -d dist"
   },
   "keywords": [],
@@ -33,6 +33,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "gh-pages": "^6.3.0"
+    "gh-pages": "^6.3.0",
+    "wrangler": "^4.71.0"
   }
 }
