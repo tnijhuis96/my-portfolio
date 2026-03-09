@@ -1,0 +1,66 @@
+{
+  "milestone": "MVP3",
+  "title": "Cloudflare Hosting & Security Launch",
+  "state": "planned",
+  "lastUpdated": "2026-03-08",
+  "vision": "Securely host the public static portfolio on Cloudflare Pages with strict edge protections while keeping CMS private/local.",
+  "scope": {
+    "in": [
+      "cloudflare-pages-static-hosting",
+      "domain-cutover-and-canonical-host-policy",
+      "https-waf-and-rate-limit-baseline",
+      "nl-only-edge-allowlist",
+      "ci-build-validation",
+      "rollback-runbook-and-go-live-checklist",
+      "mvp3-governance-documentation"
+    ],
+    "out": [
+      "public-cms-exposure",
+      "cms-migration-to-workers-or-functions",
+      "backend-api-contract-redesign",
+      "non-hosting-content-migrations",
+      "cms-webhook-auto-deploy"
+    ]
+  },
+  "decisions": {
+    "hostingModel": "cloudflare-pages-public-static",
+    "adminModel": "cms-private-local",
+    "deployTrigger": "git-based-master",
+    "previewPolicy": "pr-previews-enabled",
+    "canonicalDomain": "urban-explore-apex",
+    "redirectPolicy": "www-to-apex-permanent",
+    "securityPosture": "strict-baseline",
+    "geoPolicy": "allow-nl-only",
+    "rollbackPolicy": "immediate-previous-successful",
+    "secretHandling": "no-env-example-dependency",
+    "operationsOwnership": "single-owner-thomas",
+    "timeline": "next-weekend"
+  },
+  "constraints": [
+    "preserve-build-contract-dist-output",
+    "preserve-cms-runtime-behavior-and-private-operation",
+    "keep-env-local-and-out-of-repo",
+    "phase-based-change-control",
+    "decision-log-update-before-locked-decision-changes"
+  ],
+  "verificationCommands": [
+    "npm run build",
+    "npm run admin",
+    "npm run preview:dist"
+  ],
+  "cloudflareChecks": [
+    "production-deploy-from-master-succeeds",
+    "https-enforced-on-canonical-domain",
+    "www-redirects-to-apex",
+    "waf-managed-rules-active",
+    "nl-allowlist-enforced",
+    "rollback-to-previous-deploy-documented"
+  ],
+  "definitionOfDone": [
+    "mvp3-governance-docs-created-and-synced",
+    "agents-md-includes-mvp3-guardrails",
+    "release-placeholder-mvp-003-linked",
+    "readme-updated-with-mvp3-status-and-links",
+    "no-env-example-policy-recorded"
+  ]
+}

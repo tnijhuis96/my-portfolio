@@ -1,6 +1,7 @@
 # My Portfolio + Local CMS Documentation
 
 ## Quick navigation
+- [MVP3 Status](#mvp3-status)
 - [MVP2 Status](#mvp2-status)
 - [MVP Release Notes](#mvp-release-notes)
 - [1) Project purpose](#1-project-purpose)
@@ -16,6 +17,25 @@
 - [11) Command cheat sheet](#11-command-cheat-sheet)
 - [12) Environment variable reference](#12-environment-variable-reference)
 - [13) Current limitations and suggested next improvements](#13-current-limitations-and-suggested-next-improvements)
+
+## MVP3 Status
+MVP3 is planned as of `2026-03-08`.
+
+To ensure consistency across models and sessions, MVP3 is governed by repository files (not chat history):
+
+- Definition (source of truth): `docs/mvp3/definition.md`
+- Machine-readable contract: `docs/mvp3/definition.json`
+- Execution tracker: `docs/mvp3/tracker.md`
+- Decision log (required for direction changes): `docs/mvp3/decisions.md`
+- Baseline audit freeze: `docs/mvp3/baseline-audit.md`
+- Agent guardrails: `AGENTS.md`
+
+### MVP3 objective snapshot
+- Host the public static site securely on Cloudflare Pages.
+- Keep CMS (`adminServer.js`) private/local in MVP3.
+- Use git-based deploys from `master` with preview deployments for PRs.
+- Enforce strict edge baseline (HTTPS, WAF/rate limits, canonical redirect, NL-only geo policy).
+- No `.env.example` dependency; keep secret values out of repo.
 
 ## MVP2 Status
 MVP2 is complete as of `2026-03-08`.
@@ -71,16 +91,6 @@ The generated site output is written to `dist/`.
 
 **Functions called in this file**
 - None (configuration only).
-
----
-
-### `.env.example`
-**What it does**
-- Template showing which environment variables are required.
-- Safe to commit (contains placeholders, not secrets).
-
-**Functions called in this file**
-- None (configuration template only).
 
 ---
 
@@ -516,8 +526,7 @@ Files currently in use:
 1. Install Node.js 18+ and npm.
 2. Clone repository and install dependencies:
    - `npm install`
-3. Create local env file:
-   - `cp .env.example .env`
+3. Create local env file: `.env`
 4. Fill required values in `.env`:
    - `GITHUB_USERNAME`
    - `SESSION_SECRET`

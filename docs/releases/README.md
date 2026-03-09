@@ -11,10 +11,12 @@ This directory stores canonical release notes for each MVP.
 ## Release index
 | MVP | Date | Status | Notes |
 |---|---|---|---|
+| MVP3 | 2026-03-08 | draft | `docs/releases/mvp-003.md` |
 | MVP2 | 2026-03-08 | released | `docs/releases/mvp-002.md` |
 | MVP1 | 2026-03-08 | released | `docs/releases/mvp-001.md` |
 
 ## Conventions
 - File naming: `mvp-XXX.md` (zero-padded when practical).
+- Use `draft` status for planned/in-progress MVP notes before release closeout.
 - Keep notes user-facing and outcome-focused.
 - Include verification commands and known limitations.
