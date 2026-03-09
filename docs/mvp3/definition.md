@@ -2,8 +2,8 @@
 
 ## Status
 - Milestone: `MVP3`
-- State: `planned`
-- Last updated: `2026-03-08`
+- State: `in-progress`
+- Last updated: `2026-03-09`
 
 ## Vision
 Host the public portfolio securely on Cloudflare Pages with predictable deployment flow, strict edge protections, and clear operational guardrails while keeping the CMS private/local.

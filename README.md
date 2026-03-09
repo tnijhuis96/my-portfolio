@@ -19,7 +19,7 @@
 - [13) Current limitations and suggested next improvements](#13-current-limitations-and-suggested-next-improvements)
 
 ## MVP3 Status
-MVP3 is planned as of `2026-03-08`.
+MVP3 is in progress as of `2026-03-09`.
 
 To ensure consistency across models and sessions, MVP3 is governed by repository files (not chat history):
 

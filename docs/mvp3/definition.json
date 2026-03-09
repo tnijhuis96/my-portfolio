@@ -1,8 +1,8 @@
 {
   "milestone": "MVP3",
   "title": "Cloudflare Hosting & Security Launch",
-  "state": "planned",
-  "lastUpdated": "2026-03-08",
+  "state": "in-progress",
+  "lastUpdated": "2026-03-09",
   "vision": "Securely host the public static portfolio on Cloudflare Pages with strict edge protections while keeping CMS private/local.",
   "scope": {
     "in": [
