@@ -143,6 +143,18 @@ async function build() {
         path.join(distDir, "css/style.css")
     );
 
+    // Copy public/ static assets (ads.txt, robots.txt, etc.)
+    const publicDir = path.join(__dirname, "public");
+    if (fs.existsSync(publicDir)) {
+        fs.readdirSync(publicDir).forEach(file => {
+            fs.copyFileSync(
+                path.join(publicDir, file),
+                path.join(distDir, file)
+            );
+            console.log(`Copied public asset: ${file}`);
+        });
+    }
+
     /* =========================
        GENERATE STATIC PAGES
     ========================= */
