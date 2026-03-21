@@ -38,6 +38,25 @@ When working on MVP3 tasks in this repository:
 - NL-only geo policy behavior
 9. Do not reintroduce `.env.example` dependency for MVP3; document variable names in docs without committing secret values.
 
+## MVP5 Guardrails
+When working on MVP5 tasks in this repository:
+
+1. Use `docs/mvp5/definition.md` as the canonical source of truth.
+2. Keep implementation within MVP5 scope:
+- Pagefind static full-text search
+- Tag system (`tags` frontmatter → `/tags/[slug]/` pages)
+- Blog pagination (`POSTS_PER_PAGE`, `/blog/page/{n}/`)
+- `/now` page (manually authored)
+- Search icon button in nav
+3. Do not change backend logic or API contracts unless explicitly requested by the user.
+4. Do not add server-side search, dynamic rendering, or new runtime infrastructure.
+5. If a locked MVP5 decision changes, update `docs/mvp5/decisions.md` first, then proceed with implementation.
+6. Update `docs/mvp5/tracker.md` whenever work item status changes.
+7. Ensure verification commands succeed after meaningful changes:
+- `npm run build`
+- `npm run preview:dist`
+8. `pagefind` must remain a `devDependency` only — never a production runtime dependency.
+
 ## MVP Release Notes Governance
 When closing any MVP in this repository:
 

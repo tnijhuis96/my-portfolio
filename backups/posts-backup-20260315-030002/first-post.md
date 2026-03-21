@@ -3,9 +3,7 @@ title: "My First Markdown Post"
 date: "2026-01-10"
 description: "Why I moved my blog to a custom static generator."
 status: "published"
-tags:
-  - meta
-  - engineering
+tags: []
 ---
 
 # My Second Post

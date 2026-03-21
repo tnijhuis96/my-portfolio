@@ -57,13 +57,20 @@ function assertCanonicalPostSource() {
 }
 
 // =============================
+// SEO
+// =============================
+const SITE_URL = (process.env.SITE_URL || "https://urban-explore.com").replace(/\/$/, "");
+const POSTS_PER_PAGE = parseInt(process.env.POSTS_PER_PAGE || "5", 10);
+
+// =============================
 // Utilities
 // =============================
-function applyLayout(layout, title, content, basePath = "") {
+function applyLayout(layout, title, content, basePath = "", headMeta = "") {
     return layout
         .replace("{{title}}", title)
         .replaceAll("{{basePath}}", basePath)
-        .replace("{{content}}", content);
+        .replace("{{content}}", content)
+        .replace("{{headMeta}}", headMeta);
 }
 
 function formatDate(dateValue) {
@@ -88,6 +95,10 @@ function estimateReadTime(markdownContent) {
     const wordCount = markdownContent.trim().split(/\s+/).length;
     const minutes = Math.max(1, Math.ceil(wordCount / 220));
     return `${minutes} min read`;
+}
+
+function slugify(tag) {
+    return tag.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
 
 async function fetchGitHubRepos() {
@@ -168,11 +179,21 @@ async function build() {
                 "utf-8"
             );
 
+            const pageUrl = page === "index.html"
+                ? `${SITE_URL}/`
+                : `${SITE_URL}/${page}`;
+            let pageHeadMeta = `<link rel="canonical" href="${pageUrl}">`;
+
+            if (page === "search.html") {
+                pageHeadMeta += `\n    <link href="/pagefind/pagefind-ui.css" rel="stylesheet">`;
+            }
+
             const finalHtml = applyLayout(
                 layout,
                 page.replace(".html", ""),
                 raw,
-                ""
+                "",
+                pageHeadMeta
             );
 
             fs.writeFileSync(
@@ -200,6 +221,7 @@ async function build() {
         ? fs.readdirSync(postsDir)
         : [];
 
+    const tagMap = {};
     let postsMeta = [];
 
     files.forEach(file => {
@@ -213,22 +235,68 @@ async function build() {
         // Skip drafts
         if (data.status !== "published") return;
 
+        // W7: warn on missing description
+        if (!data.description) {
+            console.warn(`⚠️  Post "${file}" is missing a description. Add one for better SEO.`);
+        }
+
         const htmlContent = marked(content);
         const formattedDate = formatDate(data.date);
         const readingTime = estimateReadTime(content);
+        const isoDate = data.date ? new Date(data.date).toISOString() : "";
+        const slug = file.replace(".md", "");
+        const postUrl = `${SITE_URL}/blog/${slug}.html`;
+
+        // W5: OG + Twitter card meta (HTML-escaped attribute values)
+        const escapedTitle = (data.title || "Untitled")
+            .replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+        const escapedDesc = (data.description || "")
+            .replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+
+        // W6: JSON-LD Article schema (serialised safely via JSON.stringify)
+        const jsonLd = JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": data.title || "Untitled",
+            "description": data.description || "",
+            "url": postUrl,
+            "datePublished": isoDate,
+            "author": { "@type": "Person", "name": "Thomas Nijhuis" }
+        });
+
+        const postHeadMeta = [
+            `<link rel="canonical" href="${postUrl}">`,
+            `<meta property="og:type" content="article">`,
+            `<meta property="og:title" content="${escapedTitle}">`,
+            `<meta property="og:description" content="${escapedDesc}">`,
+            `<meta property="og:url" content="${postUrl}">`,
+            `<meta property="og:site_name" content="Thomas Nijhuis">`,
+            `<meta name="twitter:card" content="summary">`,
+            `<meta name="twitter:title" content="${escapedTitle}">`,
+            `<meta name="twitter:description" content="${escapedDesc}">`,
+            `<script type="application/ld+json">${jsonLd}</script>`
+        ].join("\n    ");
+
+        const tags = Array.isArray(data.tags) ? data.tags : [];
+        const tagSlugs = tags.map(slugify);
+        const tagPillsHtml = tags.length > 0
+            ? `<div class="post-tags">${tags.map((tag, i) => `<a class="tag-pill" href="/tags/${tagSlugs[i]}/">${tag.replace(/&/g, "&amp;")}</a>`).join("")}</div>`
+            : "";
 
         const postHtml = postTemplate
             .replace("{{title}}", data.title || "Untitled")
             .replace("{{description}}", data.description || "")
             .replace("{{date}}", formattedDate)
             .replace("{{readingTime}}", readingTime)
+            .replace("{{tags}}", tagPillsHtml)
             .replace("{{content}}", htmlContent);
 
         const finalHtml = applyLayout(
             layout,
             data.title || "Untitled",
             postHtml,
-            "../"
+            "../",
+            postHeadMeta
         );
 
         const outputFileName = file.replace(".md", ".html");
@@ -238,13 +306,27 @@ async function build() {
             finalHtml
         );
 
-        postsMeta.push({
+        // W8: extended postsMeta with isoDate, url, tags
+        const postMeta = {
             title: data.title || "Untitled",
             date: data.date || "",
+            isoDate,
             formattedDate,
             description: data.description || "",
             readingTime,
-            slug: outputFileName
+            url: postUrl,
+            slug: outputFileName,
+            tags,
+            tagSlugs
+        };
+        postsMeta.push(postMeta);
+
+        tags.forEach((tag, i) => {
+            const tagSlug = tagSlugs[i];
+            if (!tagMap[tagSlug]) {
+                tagMap[tagSlug] = { label: tag, posts: [] };
+            }
+            tagMap[tagSlug].posts.push(postMeta);
         });
 
         console.log(`Generated post: ${outputFileName}`);
@@ -256,10 +338,17 @@ async function build() {
             new Date(b.date || 0) - new Date(a.date || 0)
     );
 
-    // Generate blog index
-    const blogListHtml = postsMeta
-        .map(
-            post => `
+    const additionalSitemapUrls = [];
+
+    /* =========================
+       BLOG TEASER HELPER
+    ========================= */
+
+    function buildTeaserHtml(post) {
+        const pillsHtml = post.tags.length > 0
+            ? `\n    <div class="blog-teaser-tags">${post.tags.map((tag, i) => `<a class="tag-pill" href="/tags/${post.tagSlugs[i]}/">${tag.replace(/&/g, "&amp;")}</a>`).join("")}</div>`
+            : "";
+        return `
 <article class="blog-teaser">
     <div class="blog-teaser-top">
         <h2>${post.title}</h2>
@@ -267,26 +356,127 @@ async function build() {
             <span>${post.formattedDate}</span>
             <span>${post.readingTime}</span>
         </div>
-    </div>
+    </div>${pillsHtml}
     <p>${post.description || "No summary provided yet."}</p>
-    <a href="${post.slug}" class="btn-small">Read Article</a>
-</article>`
+    <a href="${post.url}" class="btn-small">Read Article</a>
+</article>`;
+    }
+
+    /* =========================
+       GENERATE BLOG INDEX (PAGINATED)
+    ========================= */
+
+    const totalPages = Math.max(1, Math.ceil(postsMeta.length / POSTS_PER_PAGE));
+
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        const start = (pageNum - 1) * POSTS_PER_PAGE;
+        const pagePosts = postsMeta.slice(start, start + POSTS_PER_PAGE);
+        const pageListHtml = pagePosts.map(buildTeaserHtml).join("");
+
+        const hasPrev = pageNum > 1;
+        const hasNext = pageNum < totalPages;
+        const prevHref = pageNum === 2 ? "/blog/" : `/blog/page/${pageNum - 1}/`;
+        const nextHref = `/blog/page/${pageNum + 1}/`;
+
+        const paginationHtml = `
+<nav class="pagination" aria-label="Blog page navigation">
+    <a class="pagination-btn"${hasPrev ? ` href="${prevHref}"` : ' aria-disabled="true"'}>&larr; Newer</a>
+    <span class="pagination-info">Page ${pageNum} of ${totalPages}</span>
+    <a class="pagination-btn"${hasNext ? ` href="${nextHref}"` : ' aria-disabled="true"'}>Older &rarr;</a>
+</nav>`;
+
+        const isFirstPage = pageNum === 1;
+        const pageCanonical = isFirstPage
+            ? `${SITE_URL}/blog/`
+            : `${SITE_URL}/blog/page/${pageNum}/`;
+        const blogPageHeadMeta = `<link rel="canonical" href="${pageCanonical}">`;
+        const pageBasePath = isFirstPage ? "../" : "../../../";
+
+        const blogIndexHtml = applyLayout(
+            layout,
+            "Blog",
+            `<section class="blog-index"><h1>Blog</h1><p class="blog-index-intro">Thoughts, project breakdowns, and lessons from shipping software every week.</p>${pageListHtml}${paginationHtml}</section>`,
+            pageBasePath,
+            blogPageHeadMeta
+        );
+
+        if (isFirstPage) {
+            fs.writeFileSync(path.join(blogDir, "index.html"), blogIndexHtml);
+            console.log("Generated blog index (page 1).");
+        } else {
+            const pageDir = path.join(blogDir, "page", String(pageNum));
+            fs.mkdirSync(pageDir, { recursive: true });
+            fs.writeFileSync(path.join(pageDir, "index.html"), blogIndexHtml);
+            console.log(`Generated blog index page ${pageNum}.`);
+            additionalSitemapUrls.push({
+                loc: pageCanonical,
+                priority: "0.6",
+                changefreq: "daily",
+                lastmod: ""
+            });
+        }
+    }
+
+    /* =========================
+       GENERATE TAG PAGES
+    ========================= */
+
+    const tagsDir = path.join(distDir, "tags");
+    fs.mkdirSync(tagsDir, { recursive: true });
+
+    Object.entries(tagMap).forEach(([slug, { label, posts: tagPosts }]) => {
+        const tagPostsHtml = tagPosts.map(buildTeaserHtml).join("");
+        const tagHeadMeta = `<link rel="canonical" href="${SITE_URL}/tags/${slug}/">`;
+        const tagSlugDir = path.join(tagsDir, slug);
+        fs.mkdirSync(tagSlugDir, { recursive: true });
+
+        const tagPageHtml = applyLayout(
+            layout,
+            `#${label}`,
+            `<section class="tag-index-page"><div class="container"><h1>#${label.replace(/&/g, "&amp;")}</h1><p class="tag-index-intro">${tagPosts.length} post${tagPosts.length === 1 ? "" : "s"} tagged <strong>${label.replace(/&/g, "&amp;")}</strong>.</p>${tagPostsHtml}</div></section>`,
+            "../../",
+            tagHeadMeta
+        );
+
+        fs.writeFileSync(path.join(tagSlugDir, "index.html"), tagPageHtml);
+        console.log(`Generated tag page: /tags/${slug}/`);
+
+        additionalSitemapUrls.push({
+            loc: `${SITE_URL}/tags/${slug}/`,
+            priority: "0.5",
+            changefreq: "weekly",
+            lastmod: ""
+        });
+    });
+
+    // All-tags overview page
+    const allTagsHeadMeta = `<link rel="canonical" href="${SITE_URL}/tags/">`;
+    const allTagPillsHtml = Object.entries(tagMap)
+        .sort(([, a], [, b]) => b.posts.length - a.posts.length)
+        .map(([slug, { label, posts: tagPosts }]) =>
+            `<a class="tag-pill" href="/tags/${slug}/">${label.replace(/&/g, "&amp;")}<span class="tag-count">(${tagPosts.length})</span></a>`
         )
         .join("");
 
-    const blogIndex = applyLayout(
+    const allTagsPageHtml = applyLayout(
         layout,
-        "Blog",
-        `<section class="blog-index"><h1>Blog</h1><p class="blog-index-intro">Thoughts, project breakdowns, and lessons from shipping software every week.</p>${blogListHtml}</section>`,
-        "../"
+        "Tags",
+        `<section class="all-tags-index"><div class="container"><h1>Tags</h1><p class="all-tags-intro">Browse posts by topic.</p><div class="all-tags-grid">${allTagPillsHtml}</div></div></section>`,
+        "../",
+        allTagsHeadMeta
     );
 
-    fs.writeFileSync(
-        path.join(blogDir, "index.html"),
-        blogIndex
-    );
+    fs.writeFileSync(path.join(tagsDir, "index.html"), allTagsPageHtml);
+    console.log("Generated tags overview page.");
 
-    console.log("Generated blog index.");
+    additionalSitemapUrls.push({
+        loc: `${SITE_URL}/tags/`,
+        priority: "0.6",
+        changefreq: "weekly",
+        lastmod: ""
+    });
+
+
 
     /* =========================
        GENERATE PROJECTS
@@ -342,6 +532,68 @@ async function build() {
     );
 
     console.log("Generated projects from GitHub API.");
+
+    /* =========================
+       GENERATE RSS FEED
+    ========================= */
+
+    const rssItems = postsMeta.map(post => `
+    <item>
+      <title><![CDATA[${post.title}]]></title>
+      <link>${post.url}</link>
+      <guid isPermaLink="true">${post.url}</guid>
+      <pubDate>${post.isoDate ? new Date(post.isoDate).toUTCString() : ""}</pubDate>
+      <description><![CDATA[${post.description}]]></description>
+    </item>`).join("");
+
+    const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Thomas Nijhuis</title>
+    <link>${SITE_URL}/blog/</link>
+    <description>Thoughts, project breakdowns, and lessons from shipping software every week.</description>
+    <language>en-us</language>
+    <atom:link href="${SITE_URL}/feed.xml" rel="self" type="application/rss+xml"/>
+    ${rssItems}
+  </channel>
+</rss>`;
+
+    fs.writeFileSync(path.join(distDir, "feed.xml"), rssXml);
+    console.log("Generated feed.xml.");
+
+    /* =========================
+       GENERATE SITEMAP
+    ========================= */
+
+    const staticUrls = [
+        { loc: `${SITE_URL}/`,               priority: "1.0", changefreq: "weekly",  lastmod: "" },
+        { loc: `${SITE_URL}/projects.html`,   priority: "0.8", changefreq: "weekly",  lastmod: "" },
+        { loc: `${SITE_URL}/blog/`,           priority: "0.9", changefreq: "daily",   lastmod: "" },
+        { loc: `${SITE_URL}/now.html`,        priority: "0.7", changefreq: "monthly", lastmod: "" },
+        { loc: `${SITE_URL}/search.html`,     priority: "0.5", changefreq: "monthly", lastmod: "" }
+    ];
+    const postUrls = postsMeta.map(post => ({
+        loc: post.url,
+        priority: "0.7",
+        changefreq: "monthly",
+        lastmod: post.isoDate ? post.isoDate.slice(0, 10) : ""
+    }));
+
+    const sitemapEntries = [...staticUrls, ...postUrls, ...additionalSitemapUrls].map(u => `
+  <url>
+    <loc>${u.loc}</loc>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>${u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ""}
+  </url>`).join("");
+
+    const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemapEntries}
+</urlset>`;
+
+    fs.writeFileSync(path.join(distDir, "sitemap.xml"), sitemapXml);
+    console.log("Generated sitemap.xml.");
+
     console.log("✅ Build complete.");
 }
 

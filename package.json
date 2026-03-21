@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "node build.js",
+    "build": "node build.js && npx pagefind --site dist",
     "admin": "node adminServer.js",
     "preview": "wrangler dev",
     "preview:dist": "npx serve dist -l 4173",
@@ -34,6 +34,7 @@
   "description": "",
   "devDependencies": {
     "gh-pages": "^6.3.0",
+    "pagefind": "^1.4.0",
     "wrangler": "^4.71.0"
   }
 }

@@ -3,9 +3,7 @@ title: "My second post"
 date: "2026-03-01"
 description: "I upgraded my website from manuel to static generated."
 status: "published"
-tags:
-  - meta
-  - engineering
+tags: []
 ---
 
 # My First Markdown Post

@@ -3,10 +3,7 @@ title: Delivered MVP 1
 description: Github Copilot and I delivered an MVP 1 for the portfolio site
 date: '2026-03-08T16:03:27.974Z'
 status: published
-tags:
-  - devlog
-  - milestone
-  - engineering
+tags: []
 ---
 
 MVP1 focused on turning the project from a working prototype into a stable, secure, local-first publishing system. The biggest structural change was unifying blog content around a single canonical source: posts. We migrated legacy post paths, enforced this with build-time guards, and updated the template/build contract so post rendering stayed consistent. That removed ambiguity and reduced future content errors.

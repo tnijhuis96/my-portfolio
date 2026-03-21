@@ -1,0 +1,13 @@
+<section class="search-page">
+    <div class="container">
+        <h1>Search</h1>
+        <p class="search-intro">Search across all posts and pages.</p>
+        <div id="search"></div>
+    </div>
+</section>
+<script src="/pagefind/pagefind-ui.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+    new PagefindUI({ element: '#search', showImages: false });
+});
+</script>

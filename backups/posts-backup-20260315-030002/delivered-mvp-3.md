@@ -3,10 +3,7 @@ title: Delivered MVP 3!
 description: Cloudflare launch, edge baseline, and a few DNS plot twists
 date: '2026-03-09T17:45:00.000Z'
 status: published
-tags:
-  - devlog
-  - milestone
-  - cloudflare
+tags: []
 ---
 
 MVP3 was the "ship it to the internet" milestone, where this portfolio graduated from local hero to globally reachable citizen on Cloudflare Pages.

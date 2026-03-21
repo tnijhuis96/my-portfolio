@@ -3,10 +3,7 @@ title: Delivered MVP 2!
 description: Github Copilot and I redesigned the look and feel of the entire website
 date: '2026-03-08T16:05:02.550Z'
 status: published
-tags:
-  - devlog
-  - milestone
-  - design
+tags: []
 ---
 
 

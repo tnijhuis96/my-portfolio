@@ -3,10 +3,7 @@ title: 'From Zero to Scaffold: Urban Explorer Takes Its First Steps'
 description: Taking the first steps
 date: '2026-03-13T18:52:32.825Z'
 status: published
-tags:
-  - urban-explorer
-  - engineering
-  - devlog
+tags: []
 ---
 
 Today marked the a new beginning, Yesterday was a big day for Urban Explorer — the passion project that wants to turn your city into a game. After weeks of planning and laying the conceptual groundwork, the team pushed the first real code to production. Milestone 1 — Project Scaffolding — is complete and merged. Let's talk about what that actually means.
