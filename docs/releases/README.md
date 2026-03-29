@@ -11,6 +11,7 @@ This directory stores canonical release notes for each MVP.
 ## Release index
 | MVP | Date | Status | Notes |
 |---|---|---|---|
+| MVP6 | 2026-03-28 | released | `docs/releases/mvp-006.md` |
 | MVP5 | TBD        | draft    | `docs/releases/mvp-005.md` |
 | MVP4 | 2026-03-20 | released | `docs/releases/mvp-004.md` |
 | MVP3 | 2026-03-08 | draft | `docs/releases/mvp-003.md` |

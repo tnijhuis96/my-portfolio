@@ -19,7 +19,8 @@
             --admin-success: #1f7a4d;
             --admin-warning: #8c5a22;
             --admin-danger: #aa3140;
-            --radius-md: 12px;
+            --admin-info: #355b9c;
+            --radius-md: 14px;
             --radius-sm: 10px;
             --shadow: 0 16px 36px rgba(20, 23, 31, 0.1);
         }
@@ -40,55 +41,102 @@
             padding: 24px;
         }
 
+        button,
+        input,
+        textarea,
+        select {
+            font: inherit;
+        }
+
+        button,
+        input,
+        textarea,
+        select {
+            border-radius: var(--radius-sm);
+        }
+
+        input:focus-visible,
+        textarea:focus-visible,
+        select:focus-visible,
+        button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(47, 55, 73, 0.22);
+        }
+
+        body,
+        h1,
+        h2,
+        h3,
+        p,
+        ul {
+            margin: 0;
+        }
+
         .cms-shell {
-            width: min(100%, 980px);
+            width: min(100%, 1400px);
             margin: 0 auto;
             display: grid;
             gap: 18px;
         }
 
-        .cms-header {
-            background: var(--admin-surface);
-            border: 1px solid var(--admin-border);
-            border-radius: var(--radius-md);
-            box-shadow: var(--shadow);
-            padding: 20px;
-        }
-
-        .cms-header h1 {
-            margin: 0 0 6px;
-            font-size: 30px;
-            line-height: 1.2;
-        }
-
-        .cms-subtitle {
-            margin: 0;
-            color: var(--admin-muted);
-        }
-
-        .cms-grid {
-            display: grid;
-            grid-template-columns: minmax(280px, 320px) 1fr;
-            gap: 18px;
-            align-items: start;
-        }
-
+        .cms-header,
         .panel {
             background: var(--admin-surface);
             border: 1px solid var(--admin-border);
             border-radius: var(--radius-md);
             box-shadow: var(--shadow);
+        }
+
+        .cms-header {
+            padding: 22px;
+        }
+
+        .cms-header h1 {
+            font-size: 30px;
+            line-height: 1.15;
+            margin-bottom: 6px;
+        }
+
+        .cms-subtitle {
+            color: var(--admin-muted);
+        }
+
+        .cms-grid {
+            display: grid;
+            grid-template-columns: minmax(300px, 360px) 1fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        .panel {
             padding: 18px;
         }
 
         .panel h2 {
-            margin: 0 0 14px;
             font-size: 19px;
+            margin-bottom: 14px;
+        }
+
+        .sidebar-stack {
+            display: grid;
+            gap: 18px;
+        }
+
+        .list-section {
+            display: grid;
+            gap: 12px;
+        }
+
+        .section-caption {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--admin-muted);
         }
 
         ul {
             list-style: none;
-            margin: 0;
             padding: 0;
             display: grid;
             gap: 10px;
@@ -98,26 +146,36 @@
             border: 1px solid var(--admin-border);
             border-radius: var(--radius-sm);
             background: var(--admin-surface-soft);
-            padding: 10px;
+            padding: 12px;
             display: grid;
-            gap: 8px;
+            gap: 10px;
         }
 
-        .post-line {
+        .post-line,
+        .editor-metadata {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
             gap: 10px;
         }
 
         .post-title {
-            font-weight: 600;
-            margin: 0;
+            font-weight: 700;
+            line-height: 1.35;
         }
 
-        .post-actions {
+        .post-meta {
+            display: grid;
+            gap: 4px;
+            color: var(--admin-muted);
+            font-size: 13px;
+        }
+
+        .post-actions,
+        .editor-actions,
+        .image-assist-actions {
             display: flex;
-            gap: 6px;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
@@ -129,6 +187,7 @@
             font-size: 12px;
             font-weight: 700;
             border: 1px solid transparent;
+            text-transform: capitalize;
         }
 
         .draft {
@@ -143,46 +202,43 @@
             border-color: #b6dfc5;
         }
 
+        .scheduled {
+            color: var(--admin-info);
+            background: #e9f0ff;
+            border-color: #bbcef5;
+        }
+
         label {
             font-size: 13px;
             font-weight: 700;
             color: var(--admin-muted);
-            margin: 4px 0 6px;
+            margin-bottom: 6px;
             display: block;
         }
 
         input,
-        textarea {
+        textarea,
+        select {
             width: 100%;
             border: 1px solid var(--admin-border);
-            border-radius: var(--radius-sm);
             padding: 10px 12px;
-            margin-bottom: 6px;
-            font: inherit;
             color: inherit;
             background: var(--admin-surface);
         }
 
-        input:focus-visible,
-        textarea:focus-visible,
-        button:focus-visible {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(47, 55, 73, 0.22);
-        }
-
         textarea {
-            min-height: 280px;
+            min-height: 360px;
             resize: vertical;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            line-height: 1.55;
         }
 
         button {
             border: 1px solid transparent;
-            border-radius: 10px;
             background: var(--admin-primary);
             color: #ffffff;
-            font: inherit;
             font-weight: 600;
-            padding: 9px 14px;
+            padding: 10px 14px;
             cursor: pointer;
             transition: background-color 150ms ease;
         }
@@ -201,36 +257,184 @@
             background: var(--admin-secondary-hover);
         }
 
-        #status {
-            margin-top: 12px;
-            min-height: 20px;
-            font-size: 14px;
-            color: var(--admin-muted);
-        }
-
         .delete-btn {
             background: var(--admin-danger);
-            color: white;
-            border-color: transparent;
+            color: #ffffff;
         }
 
         .delete-btn:hover {
             background: #922533;
         }
 
-        .editor-actions {
-            margin-top: 8px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+        .editor-shell {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+            gap: 18px;
         }
 
-        @media (max-width: 900px) {
-            .cms-grid {
+        .editor-form,
+        .preview-shell {
+            display: grid;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .assist-grid,
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .field-hint,
+        .empty-state,
+        #status,
+        #imageAssistStatus {
+            font-size: 14px;
+            color: var(--admin-muted);
+        }
+
+        .tag-input-shell,
+        .image-assist {
+            position: relative;
+        }
+
+        .tag-suggestions {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            display: none;
+            gap: 6px;
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius-sm);
+            padding: 8px;
+            box-shadow: var(--shadow);
+            z-index: 5;
+        }
+
+        .tag-suggestions.is-visible {
+            display: grid;
+        }
+
+        .tag-suggestion {
+            width: 100%;
+            text-align: left;
+            background: var(--admin-surface-soft);
+            color: var(--admin-text);
+            border-color: var(--admin-border);
+            padding: 8px 10px;
+        }
+
+        .tag-suggestion.is-active,
+        .tag-suggestion:hover {
+            background: var(--admin-secondary-hover);
+        }
+
+        .preview-shell {
+            min-height: 100%;
+        }
+
+        .preview-panel {
+            border: 1px solid var(--admin-border);
+            border-radius: var(--radius-md);
+            background: linear-gradient(180deg, #fcfcfb 0%, #f4f3ef 100%);
+            padding: 18px;
+            display: grid;
+            gap: 14px;
+            min-height: 100%;
+        }
+
+        .preview-kicker {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--admin-muted);
+        }
+
+        .preview-title {
+            font-size: 30px;
+            line-height: 1.15;
+        }
+
+        .preview-description,
+        .preview-meta {
+            color: var(--admin-muted);
+        }
+
+        .preview-body {
+            line-height: 1.7;
+            display: grid;
+            gap: 1rem;
+            overflow-wrap: anywhere;
+        }
+
+        .preview-body img,
+        .image-preview img {
+            max-width: 100%;
+            border-radius: var(--radius-sm);
+            display: block;
+        }
+
+        .preview-body pre {
+            background: #1f2023;
+            color: #f5f5f5;
+            padding: 14px;
+            border-radius: var(--radius-sm);
+            overflow-x: auto;
+        }
+
+        .preview-body blockquote {
+            border-left: 4px solid var(--admin-border);
+            padding-left: 14px;
+            color: var(--admin-muted);
+            margin: 0;
+        }
+
+        .image-preview {
+            border: 1px dashed var(--admin-border);
+            border-radius: var(--radius-sm);
+            min-height: 88px;
+            padding: 10px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: var(--admin-surface-soft);
+        }
+
+        .image-preview.is-visible {
+            display: flex;
+        }
+
+        .muted-box {
+            border: 1px dashed var(--admin-border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            color: var(--admin-muted);
+            background: var(--admin-surface-soft);
+        }
+
+        #status {
+            min-height: 20px;
+        }
+
+        @media (max-width: 1180px) {
+            .editor-shell {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 960px) {
+            .cms-grid,
+            .assist-grid,
+            .meta-grid {
                 grid-template-columns: 1fr;
             }
 
-            .post-line {
+            .post-line,
+            .editor-metadata {
                 flex-direction: column;
                 align-items: flex-start;
             }
@@ -242,44 +446,273 @@
 <main class="cms-shell">
     <header class="cms-header">
         <h1>Blog CMS Workspace</h1>
-        <p class="cms-subtitle">Draft, publish, and maintain portfolio writing from one place.</p>
+        <p class="cms-subtitle">Write with a live preview, keep drafts separated, and schedule posts without leaking them into the public build.</p>
     </header>
 
     <section class="cms-grid">
-        <aside class="panel">
-            <h2>Existing Posts</h2>
-            <ul id="postList"></ul>
+        <aside class="sidebar-stack">
+            <section class="panel list-section">
+                <div>
+                    <p class="section-caption">Published</p>
+                    <h2>Live posts</h2>
+                </div>
+                <ul id="publishedPostList"></ul>
+            </section>
+
+            <section class="panel list-section">
+                <div>
+                    <p class="section-caption">Work in progress</p>
+                    <h2>Drafts &amp; scheduled</h2>
+                </div>
+                <ul id="draftPostList"></ul>
+            </section>
         </aside>
 
         <section class="panel">
-            <h2>Editor</h2>
-            <input type="hidden" id="slug" />
-
-            <label for="title">Title</label>
-            <input id="title" placeholder="Title" />
-
-            <label for="description">Short description</label>
-            <input id="description" placeholder="Short description" />
-
-            <label for="tags">Tags (comma separated)</label>
-            <input id="tags" placeholder="Tags (comma separated)" />
-
-            <label for="content">Markdown content</label>
-            <textarea id="content" rows="12" placeholder="Markdown content"></textarea>
-
-            <div class="editor-actions">
-                <button type="button" onclick="savePost()">Save Draft</button>
-                <button type="button" onclick="publishPost()">Publish</button>
+            <div class="editor-metadata">
+                <div>
+                    <p class="section-caption">Editor</p>
+                    <h2>Authoring workspace</h2>
+                </div>
                 <button type="button" class="ghost-btn" onclick="clearForm()">New Post</button>
             </div>
 
-            <p id="status" role="status" aria-live="polite"></p>
+            <input type="hidden" id="slug" />
+
+            <section class="editor-shell">
+                <div class="editor-form">
+                    <div>
+                        <label for="title">Title</label>
+                        <input id="title" placeholder="What are you shipping?" />
+                    </div>
+
+                    <div>
+                        <label for="description">Short description</label>
+                        <input id="description" placeholder="One sentence that tells readers what this post is about" />
+                    </div>
+
+                    <div class="meta-grid">
+                        <div>
+                            <label for="statusField">Status</label>
+                            <select id="statusField">
+                                <option value="draft">Draft</option>
+                                <option value="published">Published</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="publishAt">Publish on</label>
+                            <input id="publishAt" type="date" />
+                            <p class="field-hint">Leave empty to publish immediately when status is published.</p>
+                        </div>
+                    </div>
+
+                    <div class="tag-input-shell">
+                        <label for="tags">Tags</label>
+                        <input id="tags" placeholder="devlog, cloudflare, cms" autocomplete="off" />
+                        <div id="tagSuggestions" class="tag-suggestions" role="listbox" aria-label="Tag suggestions"></div>
+                        <p class="field-hint">Suggestions come from tags already used in your posts.</p>
+                    </div>
+
+                    <div class="image-assist muted-box">
+                        <div class="assist-grid">
+                            <div>
+                                <label for="imageUrl">External image URL</label>
+                                <input id="imageUrl" type="url" placeholder="https://example.com/image.jpg" />
+                            </div>
+
+                            <div>
+                                <label for="imageAlt">Image alt text</label>
+                                <input id="imageAlt" placeholder="Describe the image" />
+                            </div>
+                        </div>
+
+                        <div class="image-assist-actions">
+                            <button type="button" class="ghost-btn" onclick="insertImageMarkdown()">Insert image markdown</button>
+                        </div>
+
+                        <p id="imageAssistStatus">Paste an external image URL to preview it before inserting markdown.</p>
+                        <div id="imagePreview" class="image-preview">
+                            <img id="imagePreviewImg" alt="External image preview" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="content">Markdown content</label>
+                        <textarea id="content" rows="18" placeholder="Write markdown here. The preview updates while you type."></textarea>
+                    </div>
+
+                    <div class="editor-actions">
+                        <button type="button" onclick="savePost()">Save Post</button>
+                        <button type="button" onclick="publishPost()">Publish Now</button>
+                    </div>
+
+                    <p id="status" role="status" aria-live="polite"></p>
+                </div>
+
+                <div class="preview-shell">
+                    <div class="preview-panel">
+                        <p class="preview-kicker">Live preview</p>
+                        <h3 id="previewTitle" class="preview-title">Untitled draft</h3>
+                        <p id="previewDescription" class="preview-description">Add a short description to see how the post intro reads.</p>
+                        <p id="previewMeta" class="preview-meta">Draft preview. Public output will follow the selected status and schedule.</p>
+                        <article id="previewBody" class="preview-body">
+                            <p>Start writing in markdown to preview the rendered post.</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
         </section>
     </section>
 </main>
 
+<script src="/admin/vendor/marked.min.js"></script>
 <script>
 let csrfToken = "";
+let allTags = [];
+let currentTagSuggestions = [];
+let activeTagSuggestionIndex = -1;
+let previewTimer = 0;
+
+const elements = {
+    slug: document.getElementById("slug"),
+    title: document.getElementById("title"),
+    description: document.getElementById("description"),
+    statusField: document.getElementById("statusField"),
+    publishAt: document.getElementById("publishAt"),
+    tags: document.getElementById("tags"),
+    tagSuggestions: document.getElementById("tagSuggestions"),
+    imageUrl: document.getElementById("imageUrl"),
+    imageAlt: document.getElementById("imageAlt"),
+    imageAssistStatus: document.getElementById("imageAssistStatus"),
+    imagePreview: document.getElementById("imagePreview"),
+    imagePreviewImg: document.getElementById("imagePreviewImg"),
+    content: document.getElementById("content"),
+    publishedPostList: document.getElementById("publishedPostList"),
+    draftPostList: document.getElementById("draftPostList"),
+    status: document.getElementById("status"),
+    previewTitle: document.getElementById("previewTitle"),
+    previewDescription: document.getElementById("previewDescription"),
+    previewMeta: document.getElementById("previewMeta"),
+    previewBody: document.getElementById("previewBody")
+};
+
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getTodayDateKey() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function normalizeTagList(input) {
+    const seen = new Set();
+
+    return String(input || "")
+        .split(",")
+        .map(tag => tag.trim().replace(/\s+/g, " "))
+        .filter(tag => {
+            if (!tag) {
+                return false;
+            }
+
+            const key = tag.toLowerCase();
+
+            if (seen.has(key)) {
+                return false;
+            }
+
+            seen.add(key);
+            return true;
+        });
+}
+
+function isValidImageUrl(value) {
+    return /^https?:\/\/\S+$/i.test(String(value || "").trim());
+}
+
+function formatPostDate(post) {
+    if (post.publishAt) {
+        return post.publishAt;
+    }
+
+    if (!post.date) {
+        return "Undated";
+    }
+
+    const parsed = new Date(post.date);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return post.date;
+    }
+
+    return parsed.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
+}
+
+function setStatusMessage(message) {
+    elements.status.textContent = message;
+}
+
+function createEmptyState(message) {
+    const item = document.createElement("li");
+    item.className = "empty-state";
+    item.textContent = message;
+    return item;
+}
+
+function renderPostList(target, posts, emptyMessage) {
+    target.innerHTML = "";
+
+    if (posts.length === 0) {
+        target.appendChild(createEmptyState(emptyMessage));
+        return;
+    }
+
+    posts.forEach(post => {
+        const item = document.createElement("li");
+        const badgeClass = post.displayStatus || post.status || "draft";
+
+        item.innerHTML = `
+            <div class="post-line">
+                <div>
+                    <p class="post-title">${escapeHtml(post.title)}</p>
+                    <div class="post-meta">
+                        <span>${escapeHtml(formatPostDate(post))}</span>
+                        ${post.description ? `<span>${escapeHtml(post.description)}</span>` : ""}
+                    </div>
+                </div>
+                <span class="badge ${badgeClass}">${escapeHtml(post.displayStatus || post.status || "draft")}</span>
+            </div>
+            <div class="post-actions">
+                <button class="ghost-btn" type="button" data-action="edit">Edit</button>
+                <button class="delete-btn" type="button" data-action="delete">Delete</button>
+            </div>
+        `;
+
+        item.querySelector('[data-action="edit"]').addEventListener("click", () => {
+            editPost(post.slug);
+        });
+
+        item.querySelector('[data-action="delete"]').addEventListener("click", () => {
+            deletePost(post.slug);
+        });
+
+        target.appendChild(item);
+    });
+}
 
 async function loadCsrfToken() {
     const res = await fetch("/csrf-token");
@@ -314,109 +747,296 @@ async function loadPosts() {
     const res = await apiFetch("/posts");
 
     if (!res.ok) {
-        document.getElementById("status").innerText =
-            "Failed to load posts. Please sign in again.";
+        setStatusMessage("Failed to load posts. Please sign in again.");
         return;
     }
 
     const posts = await res.json();
+    const publishedPosts = posts.filter(post => (post.displayStatus || post.status) === "published");
+    const draftPosts = posts.filter(post => (post.displayStatus || post.status) !== "published");
 
-    const list = document.getElementById("postList");
-    list.innerHTML = "";
+    renderPostList(elements.publishedPostList, publishedPosts, "No published posts yet.");
+    renderPostList(elements.draftPostList, draftPosts, "No drafts or scheduled posts yet.");
+}
 
-    posts.forEach(post => {
-        const li = document.createElement("li");
+async function loadTagPool() {
+    const res = await apiFetch("/tags/autocomplete");
 
-        const statusClass = post.status === "published"
-            ? "published"
-            : "draft";
+    if (!res.ok) {
+        return;
+    }
 
-        li.innerHTML = `
-            <div class="post-line">
-                <p class="post-title">${post.title}</p>
-                <span class="badge ${statusClass}">${post.status || "draft"}</span>
-            </div>
-            <div class="post-actions">
-                <button class="ghost-btn" onclick="editPost('${post.slug}')">Edit</button>
-                <button class="delete-btn" onclick="deletePost('${post.slug}')">Delete</button>
-            </div>
-        `;
+    const result = await res.json();
+    allTags = Array.isArray(result.tags) ? result.tags : [];
+}
 
-        list.appendChild(li);
+function hideTagSuggestions() {
+    elements.tagSuggestions.classList.remove("is-visible");
+    elements.tagSuggestions.innerHTML = "";
+    currentTagSuggestions = [];
+    activeTagSuggestionIndex = -1;
+}
+
+function renderTagSuggestions() {
+    const rawValue = elements.tags.value;
+    const segments = rawValue.split(",");
+    const fragment = (segments[segments.length - 1] || "").trim().toLowerCase();
+    const existingTags = normalizeTagList(rawValue).map(tag => tag.toLowerCase());
+
+    if (!fragment) {
+        hideTagSuggestions();
+        return;
+    }
+
+    currentTagSuggestions = allTags
+        .filter(tag => {
+            const normalizedTag = tag.toLowerCase();
+            return normalizedTag.includes(fragment) && !existingTags.includes(normalizedTag);
+        })
+        .slice(0, 6);
+
+    if (currentTagSuggestions.length === 0) {
+        hideTagSuggestions();
+        return;
+    }
+
+    elements.tagSuggestions.innerHTML = "";
+    activeTagSuggestionIndex = 0;
+
+    currentTagSuggestions.forEach((tag, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `tag-suggestion${index === activeTagSuggestionIndex ? " is-active" : ""}`;
+        button.textContent = tag;
+        button.setAttribute("role", "option");
+        button.addEventListener("mousedown", event => {
+            event.preventDefault();
+            applyTagSuggestion(tag);
+        });
+        elements.tagSuggestions.appendChild(button);
     });
+
+    elements.tagSuggestions.classList.add("is-visible");
+}
+
+function updateActiveTagSuggestion() {
+    Array.from(elements.tagSuggestions.children).forEach((child, index) => {
+        child.classList.toggle("is-active", index === activeTagSuggestionIndex);
+    });
+}
+
+function applyTagSuggestion(tag) {
+    const rawSegments = elements.tags.value.split(",");
+    const committed = rawSegments.slice(0, -1).map(segment => segment.trim()).filter(Boolean);
+    const nextTags = normalizeTagList([...committed, tag].join(", "));
+
+    elements.tags.value = `${nextTags.join(", ")}, `;
+    hideTagSuggestions();
+}
+
+function handleTagKeydown(event) {
+    if (currentTagSuggestions.length === 0) {
+        return;
+    }
+
+    if (event.key === "ArrowDown") {
+        event.preventDefault();
+        activeTagSuggestionIndex = (activeTagSuggestionIndex + 1) % currentTagSuggestions.length;
+        updateActiveTagSuggestion();
+        return;
+    }
+
+    if (event.key === "ArrowUp") {
+        event.preventDefault();
+        activeTagSuggestionIndex = (activeTagSuggestionIndex - 1 + currentTagSuggestions.length) % currentTagSuggestions.length;
+        updateActiveTagSuggestion();
+        return;
+    }
+
+    if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        applyTagSuggestion(currentTagSuggestions[activeTagSuggestionIndex]);
+        return;
+    }
+
+    if (event.key === "Escape") {
+        hideTagSuggestions();
+    }
+}
+
+function updateImagePreview() {
+    const imageUrl = elements.imageUrl.value.trim();
+
+    if (!imageUrl) {
+        elements.imageAssistStatus.textContent = "Paste an external image URL to preview it before inserting markdown.";
+        elements.imagePreview.classList.remove("is-visible");
+        elements.imagePreviewImg.removeAttribute("src");
+        return;
+    }
+
+    if (!isValidImageUrl(imageUrl)) {
+        elements.imageAssistStatus.textContent = "Use a valid http or https image URL.";
+        elements.imagePreview.classList.remove("is-visible");
+        elements.imagePreviewImg.removeAttribute("src");
+        return;
+    }
+
+    elements.imageAssistStatus.textContent = "Preview loaded. Use Insert image markdown to add it at the cursor position.";
+    elements.imagePreview.classList.add("is-visible");
+    elements.imagePreviewImg.src = imageUrl;
+}
+
+function insertImageMarkdown() {
+    const imageUrl = elements.imageUrl.value.trim();
+    const imageAlt = elements.imageAlt.value.trim() || "Image";
+
+    if (!isValidImageUrl(imageUrl)) {
+        setStatusMessage("Enter a valid http or https image URL before inserting markdown.");
+        return;
+    }
+
+    const markdown = `\n![${imageAlt}](${imageUrl})\n`;
+    const start = elements.content.selectionStart;
+    const end = elements.content.selectionEnd;
+    const currentValue = elements.content.value;
+
+    elements.content.value = `${currentValue.slice(0, start)}${markdown}${currentValue.slice(end)}`;
+    elements.content.focus();
+    elements.content.selectionStart = start + markdown.length;
+    elements.content.selectionEnd = start + markdown.length;
+    schedulePreviewRender();
+}
+
+function renderPreview() {
+    const title = elements.title.value.trim() || "Untitled draft";
+    const description = elements.description.value.trim() || "Add a short description to see how the post intro reads.";
+    const status = elements.statusField.value || "draft";
+    const publishAt = elements.publishAt.value;
+    const content = elements.content.value.trim();
+
+    elements.previewTitle.textContent = title;
+    elements.previewDescription.textContent = description;
+
+    let metaLine = status === "published"
+        ? "Published output preview"
+        : "Draft preview";
+
+    if (publishAt) {
+        metaLine += publishAt > getTodayDateKey()
+            ? ` • Scheduled for ${publishAt}`
+            : ` • Publish date ${publishAt}`;
+    }
+
+    elements.previewMeta.textContent = metaLine;
+
+    if (!content) {
+        elements.previewBody.innerHTML = "<p>Start writing in markdown to preview the rendered post.</p>";
+        return;
+    }
+
+    if (window.marked && typeof window.marked.parse === "function") {
+        elements.previewBody.innerHTML = window.marked.parse(content, {
+            headerIds: false,
+            mangle: false
+        });
+        return;
+    }
+
+    elements.previewBody.innerHTML = `<p>${escapeHtml(content).replace(/\n/g, "<br>")}</p>`;
+}
+
+function schedulePreviewRender() {
+    window.clearTimeout(previewTimer);
+    previewTimer = window.setTimeout(renderPreview, 120);
 }
 
 async function editPost(slug) {
     const res = await apiFetch(`/posts/${slug}`);
 
     if (!res.ok) {
-        document.getElementById("status").innerText = "Failed to load post.";
+        setStatusMessage("Failed to load post.");
         return;
     }
 
     const post = await res.json();
 
-    document.getElementById("slug").value = slug;
-    document.getElementById("title").value = post.title;
-    document.getElementById("description").value = post.description;
-    document.getElementById("tags").value = post.tags || "";
-    document.getElementById("content").value = post.content;
+    elements.slug.value = slug;
+    elements.title.value = post.title || "";
+    elements.description.value = post.description || "";
+    elements.statusField.value = post.status || "draft";
+    elements.publishAt.value = post.publishAt || "";
+    elements.tags.value = Array.isArray(post.tags) ? post.tags.join(", ") : "";
+    elements.content.value = post.content || "";
+    elements.imageUrl.value = "";
+    elements.imageAlt.value = "";
+
+    updateImagePreview();
+    hideTagSuggestions();
+    renderPreview();
+    setStatusMessage(`Editing ${post.title || slug}.`);
 }
 
-async function savePost() {
-    const slug = document.getElementById("slug").value;
-    const title = document.getElementById("title").value;
-    const description = document.getElementById("description").value;
-    const tags = document.getElementById("tags").value;
-    const content = document.getElementById("content").value;
+async function persistPost({ forcedStatus = null, forceImmediatePublish = false } = {}) {
+    let publishAt = elements.publishAt.value;
+    let status = forcedStatus || elements.statusField.value || "draft";
+
+    if (forceImmediatePublish) {
+        status = "published";
+
+        if (publishAt && publishAt > getTodayDateKey()) {
+            publishAt = getTodayDateKey();
+            elements.publishAt.value = publishAt;
+        }
+
+        elements.statusField.value = status;
+    }
 
     const res = await apiFetch("/save-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            slug,
-            title,
-            description,
-            tags,
-            content,
-            status: "draft"
+            slug: elements.slug.value,
+            title: elements.title.value,
+            description: elements.description.value,
+            tags: elements.tags.value,
+            content: elements.content.value,
+            status,
+            publishAt
         })
     });
 
     const result = await res.json();
 
-    document.getElementById("status").innerText = result.success
-        ? `Draft saved! ${result.deploy?.message || ""}`.trim()
-        : [result.error, result.details].filter(Boolean).join(" ");
+    if (result.success && result.slug) {
+        elements.slug.value = result.slug;
+    }
 
-    loadPosts();
-}
-
-async function publishPost() {
-    const slug = document.getElementById("slug").value;
-
-    if (!slug) {
-        document.getElementById("status").innerText =
-            "You must save the post before publishing.";
+    if (result.success) {
+        setStatusMessage(
+            `${status === "published" ? "Post saved for publication." : "Post saved."} ${result.deploy?.message || ""}`.trim()
+        );
+        await Promise.all([loadPosts(), loadTagPool()]);
+        renderPreview();
         return;
     }
 
-    const res = await apiFetch(`/publish/${slug}`, {
-        method: "POST"
-    });
+    setStatusMessage([result.error, result.details].filter(Boolean).join(" "));
+}
 
-    const result = await res.json();
+async function savePost() {
+    await persistPost({ forcedStatus: elements.statusField.value });
+}
 
-    document.getElementById("status").innerText = result.success
-        ? `Post published! ${result.deploy?.message || ""}`.trim()
-        : [result.error, result.details].filter(Boolean).join(" ");
-
-    loadPosts();
+async function publishPost() {
+    await persistPost({ forcedStatus: "published", forceImmediatePublish: true });
 }
 
 async function deletePost(slug) {
     const confirmed = confirm("Are you sure you want to delete this post?");
-    if (!confirmed) return;
+
+    if (!confirmed) {
+        return;
+    }
 
     const res = await apiFetch(`/posts/${slug}`, {
         method: "DELETE"
@@ -424,35 +1044,72 @@ async function deletePost(slug) {
 
     const result = await res.json();
 
-    document.getElementById("status").innerText = result.success
-        ? `Post deleted! ${result.deploy?.message || ""}`.trim()
-        : [result.error, result.details].filter(Boolean).join(" ");
+    if (result.success) {
+        setStatusMessage(`Post deleted. ${result.deploy?.message || ""}`.trim());
 
-    // If deleted post was open in editor, clear form
-    if (document.getElementById("slug").value === slug) {
-        clearForm();
+        if (elements.slug.value === slug) {
+            clearForm();
+        }
+
+        await Promise.all([loadPosts(), loadTagPool()]);
+        return;
     }
 
-    loadPosts();
+    setStatusMessage([result.error, result.details].filter(Boolean).join(" "));
 }
 
 function clearForm() {
-    document.getElementById("slug").value = "";
-    document.getElementById("title").value = "";
-    document.getElementById("description").value = "";
-    document.getElementById("tags").value = "";
-    document.getElementById("content").value = "";
+    elements.slug.value = "";
+    elements.title.value = "";
+    elements.description.value = "";
+    elements.statusField.value = "draft";
+    elements.publishAt.value = "";
+    elements.tags.value = "";
+    elements.imageUrl.value = "";
+    elements.imageAlt.value = "";
+    elements.content.value = "";
+    hideTagSuggestions();
+    updateImagePreview();
+    renderPreview();
+    setStatusMessage("Editor reset for a new post.");
 }
 
 async function initAdmin() {
     try {
+        if (window.marked && typeof window.marked.setOptions === "function") {
+            window.marked.setOptions({
+                headerIds: false,
+                mangle: false
+            });
+        }
+
         await loadCsrfToken();
-        await loadPosts();
+        await Promise.all([loadPosts(), loadTagPool()]);
+        renderPreview();
+        updateImagePreview();
     } catch (error) {
-        document.getElementById("status").innerText =
-            "Failed to initialize admin session.";
+        setStatusMessage("Failed to initialize admin session.");
     }
 }
+
+elements.title.addEventListener("input", schedulePreviewRender);
+elements.description.addEventListener("input", schedulePreviewRender);
+elements.statusField.addEventListener("change", schedulePreviewRender);
+elements.publishAt.addEventListener("change", schedulePreviewRender);
+elements.content.addEventListener("input", schedulePreviewRender);
+elements.tags.addEventListener("input", renderTagSuggestions);
+elements.tags.addEventListener("keydown", handleTagKeydown);
+elements.tags.addEventListener("blur", () => {
+    window.setTimeout(hideTagSuggestions, 120);
+});
+elements.imageUrl.addEventListener("input", updateImagePreview);
+elements.imageAlt.addEventListener("input", updateImagePreview);
+
+document.addEventListener("click", event => {
+    if (!event.target.closest(".tag-input-shell")) {
+        hideTagSuggestions();
+    }
+});
 
 initAdmin();
 </script>

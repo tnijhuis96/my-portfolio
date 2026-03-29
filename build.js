@@ -61,6 +61,8 @@ function assertCanonicalPostSource() {
 // =============================
 const SITE_URL = (process.env.SITE_URL || "https://urban-explore.com").replace(/\/$/, "");
 const POSTS_PER_PAGE = parseInt(process.env.POSTS_PER_PAGE || "5", 10);
+const POST_STATUS_DRAFT = "draft";
+const POST_STATUS_PUBLISHED = "published";
 
 // =============================
 // Utilities
@@ -99,6 +101,44 @@ function estimateReadTime(markdownContent) {
 
 function slugify(tag) {
     return tag.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+}
+
+function normalizeStatus(value) {
+    return String(value || "").trim().toLowerCase() === POST_STATUS_DRAFT
+        ? POST_STATUS_DRAFT
+        : POST_STATUS_PUBLISHED;
+}
+
+function isValidDateOnly(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false;
+    }
+
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    return date.getUTCFullYear() === year
+        && date.getUTCMonth() === month - 1
+        && date.getUTCDate() === day;
+}
+
+function getTodayDateKey(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function isFuturePublishAt(value) {
+    return isValidDateOnly(value) && value > getTodayDateKey();
+}
+
+function getEffectivePostDateValue(data) {
+    if (isValidDateOnly(data.publishAt)) {
+        return `${data.publishAt}T00:00:00`;
+    }
+
+    return data.date || "";
 }
 
 async function fetchGitHubRepos() {
@@ -231,9 +271,16 @@ async function build() {
         );
 
         const { data, content } = matter(fileContent);
+        const normalizedStatus = normalizeStatus(data.status);
+        const publishAt = isValidDateOnly(data.publishAt) ? data.publishAt : "";
 
-        // Skip drafts
-        if (data.status !== "published") return;
+        if (normalizedStatus === POST_STATUS_DRAFT) {
+            return;
+        }
+
+        if (publishAt && isFuturePublishAt(publishAt)) {
+            return;
+        }
 
         // W7: warn on missing description
         if (!data.description) {
@@ -241,9 +288,13 @@ async function build() {
         }
 
         const htmlContent = marked(content);
-        const formattedDate = formatDate(data.date);
+        const effectiveDateValue = getEffectivePostDateValue(data);
+        const formattedDate = formatDate(effectiveDateValue);
         const readingTime = estimateReadTime(content);
-        const isoDate = data.date ? new Date(data.date).toISOString() : "";
+        const effectiveDate = effectiveDateValue ? new Date(effectiveDateValue) : null;
+        const isoDate = effectiveDate && !Number.isNaN(effectiveDate.getTime())
+            ? effectiveDate.toISOString()
+            : "";
         const slug = file.replace(".md", "");
         const postUrl = `${SITE_URL}/blog/${slug}.html`;
 
@@ -309,13 +360,15 @@ async function build() {
         // W8: extended postsMeta with isoDate, url, tags
         const postMeta = {
             title: data.title || "Untitled",
-            date: data.date || "",
+            date: effectiveDateValue || data.date || "",
             isoDate,
             formattedDate,
             description: data.description || "",
             readingTime,
             url: postUrl,
             slug: outputFileName,
+            status: normalizedStatus,
+            publishAt,
             tags,
             tagSlugs
         };
@@ -335,7 +388,7 @@ async function build() {
     // Sort newest first (safe date handling)
     postsMeta.sort(
         (a, b) =>
-            new Date(b.date || 0) - new Date(a.date || 0)
+            new Date(b.isoDate || 0) - new Date(a.isoDate || 0)
     );
 
     const additionalSitemapUrls = [];

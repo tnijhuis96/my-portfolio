@@ -57,6 +57,27 @@ When working on MVP5 tasks in this repository:
 - `npm run preview:dist`
 8. `pagefind` must remain a `devDependency` only — never a production runtime dependency.
 
+## MVP6 Guardrails
+When working on MVP6 tasks in this repository:
+
+1. Use `docs/mvp6/definition.md` as the canonical source of truth.
+2. Keep implementation within MVP6 scope:
+- live markdown preview in the local CMS editor
+- draft and scheduled-publish authoring flow
+- tag autocomplete sourced from existing post tags
+- external image URL assist with inline preview in the editor
+3. Do not change backend logic or public-facing API contracts unless explicitly requested by the user.
+4. Keep all MVP6 behavior local to the CMS and static build pipeline; do not add new runtime infrastructure.
+5. If a locked MVP6 decision changes, update `docs/mvp6/decisions.md` first, then proceed with implementation.
+6. Update `docs/mvp6/tracker.md` whenever work item status changes.
+7. Ensure verification commands succeed after meaningful changes:
+- `npm run build`
+- `npm run admin`
+- `npm run preview:dist`
+8. Treat missing legacy post fields conservatively:
+- missing `status` defaults to `published`
+- missing `publishAt` means no schedule gate
+
 ## MVP Release Notes Governance
 When closing any MVP in this repository:
 

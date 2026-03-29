@@ -3,7 +3,7 @@
 Canonical reference for the long-term feature roadmap of urban-explore.com.
 Each entry maps to a dedicated `docs/mvpX/` milestone folder with its own definition, tracker, and decisions.
 
-Updated: 2026-03-20
+Updated: 2026-03-28
 
 ---
 
@@ -23,7 +23,7 @@ Updated: 2026-03-20
 |------|---------------------------------|----------------------------|-------------|
 | MVP4 | SEO & Discoverability           | Build-time SEO foundations | completed   |
 | MVP5 | Interactive Features & Search   | Static search, tags, pages | completed   |
-| MVP6 | CMS & Authoring UX              | Better writing experience  | not-started |
+| MVP6 | CMS & Authoring UX              | Better writing experience  | completed   |
 | MVP7 | Observability & Dynamic Edge    | Analytics, view counters   | not-started |
 
 ---
