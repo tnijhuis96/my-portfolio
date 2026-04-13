@@ -1,0 +1,15 @@
+:root {
+  --bg: #f5f2ec;
+  --surface: #fffdf9;
+  --text: #1d1f24;
+  --muted: #5b616e;
+  --border: #d9d1c4;
+  --accent: #24364b;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+}
