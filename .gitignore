@@ -26,3 +26,12 @@ yarn-error.log*
 !.env.example
 
 .worktrees/
+.superpowers/
+apps/site/node_modules/
+apps/site/dist/
+apps/site/.astro/
+apps/site/.env
+apps/studio/node_modules/
+apps/studio/dist/
+apps/studio/.sanity/
+apps/studio/.env

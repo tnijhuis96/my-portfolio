@@ -1,0 +1,22 @@
+{
+  "name": "@portfolio/site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^13.1.9",
+    "@astrojs/sitemap": "^3.7.2",
+    "@sanity/client": "^7.21.0",
+    "astro": "^6.1.6",
+    "groq": "^5.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4",
+    "zod": "^4.3.6"
+  }
+}

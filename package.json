@@ -26,7 +26,11 @@
     "backup:weekly:systemd:remove": "node scripts/weekly-backup-systemd.js remove",
     "backup:weekly:systemd:status": "node scripts/weekly-backup-systemd.js status",
     "deploy": "wrangler deploy",
-    "deploy:gh-pages": "npm run build && gh-pages -d dist"
+    "deploy:gh-pages": "npm run build && gh-pages -d dist",
+    "build:site": "npm run build --workspace apps/site",
+    "dev:site": "npm run dev --workspace apps/site",
+    "build:studio": "npm run build --workspace apps/studio",
+    "dev:studio": "npm run dev --workspace apps/studio"
   },
   "keywords": [],
   "author": "Thomas Nijhuis",
@@ -36,5 +40,10 @@
     "gh-pages": "^6.3.0",
     "pagefind": "^1.4.0",
     "wrangler": "^4.71.0"
-  }
+  },
+  "private": true,
+  "workspaces": [
+    "apps/site",
+    "apps/studio"
+  ]
 }
