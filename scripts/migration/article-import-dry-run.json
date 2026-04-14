@@ -13,13 +13,13 @@
     "body": [
       {
         "_type": "block",
-        "_key": "block0000",
+        "_key": "block0001",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0001",
+            "_key": "span0000",
             "marks": [],
             "text": "MVP2 was the full visual redesign milestone. The goal was to modernize the public portfolio and CMS UI while preserving backend behavior and API contracts from MVP1. We executed this in phases, with governance tracked in mvp2 and decisions locked before implementation."
           }
@@ -27,13 +27,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0002",
+        "_key": "block0003",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0003",
+            "_key": "span0002",
             "marks": [],
             "text": "The redesign introduced a tokenized design foundation in style.css (typography scale, spacing, color system, shadows, motion, focus styles). This replaced scattered styling with a coherent visual system and made future UI work faster and more predictable."
           }
@@ -41,13 +41,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0004",
+        "_key": "block0005",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0005",
+            "_key": "span0004",
             "marks": [],
             "text": "On the public site, we upgraded core layout and interaction patterns through layout.html and page/template updates. Navigation became compact and responsive, with improved keyboard support, skip-link handling, and better mobile behavior. The homepage content hierarchy and copy were refined to communicate a stronger personal-builder narrative. Project presentation shifted to a more structured, data-focused card model for both static and GitHub-generated entries."
           }
@@ -55,13 +55,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0006",
+        "_key": "block0007",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0007",
+            "_key": "span0006",
             "marks": [],
             "text": "Blog UX was significantly improved: posts gained readable editorial rhythm, better spacing and typography, and clearer metadata (formatted date + read-time). The blog index moved from basic listing to a structured teaser layout that is easier to scan and more consistent with the new design language."
           }
@@ -69,13 +69,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0008",
+        "_key": "block0009",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0009",
+            "_key": "span0008",
             "marks": [],
             "text": "Admin pages (login.html, blog-editor.html) received a separate but coherent visual theme. This was intentionally distinct from the public site while keeping the same usability quality and preserving existing CMS functionality."
           }
@@ -83,13 +83,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0010",
+        "_key": "block0011",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0011",
+            "_key": "span0010",
             "marks": [],
             "text": "The most complex parts of MVP2 were:"
           }
@@ -97,13 +97,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0012",
+        "_key": "block0013",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0013",
+            "_key": "span0012",
             "marks": [],
             "text": "Redesigning extensively without touching backend logic or API behavior."
           }
@@ -113,13 +113,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0014",
+        "_key": "block0015",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0015",
+            "_key": "span0014",
             "marks": [],
             "text": "Building a consistent design-token system while avoiding regressions across many templates and generated pages."
           }
@@ -129,13 +129,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0016",
+        "_key": "block0017",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0017",
+            "_key": "span0016",
             "marks": [],
             "text": "Achieving responsive polish and accessibility hardening together (focus visibility, touch targets, keyboard flows, reduced-motion support, live regions)."
           }
@@ -145,13 +145,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0018",
+        "_key": "block0019",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0019",
+            "_key": "span0018",
             "marks": [],
             "text": "Keeping generated and source-rendered pages visually aligned after build output regeneration."
           }
@@ -161,13 +161,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0020",
+        "_key": "block0021",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0021",
+            "_key": "span0020",
             "marks": [],
             "text": "MVP2 closed with full verification (npm run build, npm run admin, npm run preview:dist), tracker completion, decision log updates, and formal release notes. The end result is a more intentional, modern, accessible product with a repeatable documentation and release workflow for future MVPs."
           }
@@ -189,13 +189,13 @@
     "body": [
       {
         "_type": "block",
-        "_key": "block0000",
+        "_key": "block0001",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0001",
+            "_key": "span0000",
             "marks": [],
             "text": "MVP3 was the \"ship it to the internet\" milestone, where this portfolio graduated from local hero to globally reachable citizen on Cloudflare Pages."
           }
@@ -203,27 +203,41 @@
       },
       {
         "_type": "block",
-        "_key": "block0002",
+        "_key": "block0005",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0003",
+            "_key": "span0002",
             "marks": [],
-            "text": "The mission was clear: production deploys from master, clean preview deploys from non-main branches, sensible domain policy, edge security baseline, and operations docs that future-me can actually follow at 2 AM."
+            "text": "The mission was clear: production deploys from "
+          },
+          {
+            "_type": "span",
+            "_key": "span0003",
+            "marks": [
+              "code"
+            ],
+            "text": "master"
+          },
+          {
+            "_type": "span",
+            "_key": "span0004",
+            "marks": [],
+            "text": ", clean preview deploys from non-main branches, sensible domain policy, edge security baseline, and operations docs that future-me can actually follow at 2 AM."
           }
         ]
       },
       {
         "_type": "block",
-        "_key": "block0004",
+        "_key": "block0007",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0005",
+            "_key": "span0006",
             "marks": [],
             "text": "What we achieved:"
           }
@@ -231,13 +245,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0006",
+        "_key": "block0009",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0007",
+            "_key": "span0008",
             "marks": [],
             "text": "Set up Cloudflare Pages as the hosting path for static output."
           }
@@ -247,15 +261,29 @@
       },
       {
         "_type": "block",
-        "_key": "block0008",
+        "_key": "block0013",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0009",
+            "_key": "span0010",
             "marks": [],
-            "text": "Kept adminServer.js private and local-only, exactly as planned."
+            "text": "Kept "
+          },
+          {
+            "_type": "span",
+            "_key": "span0011",
+            "marks": [
+              "code"
+            ],
+            "text": "adminServer.js"
+          },
+          {
+            "_type": "span",
+            "_key": "span0012",
+            "marks": [],
+            "text": " private and local-only, exactly as planned."
           }
         ],
         "listItem": "bullet",
@@ -263,13 +291,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0010",
+        "_key": "block0015",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0011",
+            "_key": "span0014",
             "marks": [],
             "text": "Locked governance with canonical MVP3 docs: definition, decisions, tracker, and release notes."
           }
@@ -279,15 +307,29 @@
       },
       {
         "_type": "block",
-        "_key": "block0012",
+        "_key": "block0019",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0013",
+            "_key": "span0016",
             "marks": [],
-            "text": "Verified production deployment from master and preview deployment from a feature branch."
+            "text": "Verified production deployment from "
+          },
+          {
+            "_type": "span",
+            "_key": "span0017",
+            "marks": [
+              "code"
+            ],
+            "text": "master"
+          },
+          {
+            "_type": "span",
+            "_key": "span0018",
+            "marks": [],
+            "text": " and preview deployment from a feature branch."
           }
         ],
         "listItem": "bullet",
@@ -295,13 +337,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0014",
+        "_key": "block0021",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0015",
+            "_key": "span0020",
             "marks": [],
             "text": "Confirmed apex domain behavior and HTTPS posture."
           }
@@ -311,13 +353,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0016",
+        "_key": "block0023",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0017",
+            "_key": "span0022",
             "marks": [],
             "text": "Closed MVP3 with explicit documentation, evidence, and change-control discipline."
           }
@@ -327,13 +369,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0018",
+        "_key": "block0025",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0019",
+            "_key": "span0024",
             "marks": [],
             "text": "Now, the fun part: the struggles."
           }
@@ -341,13 +383,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0020",
+        "_key": "block0027",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0021",
+            "_key": "span0026",
             "marks": [],
             "text": "At first, deployment evidence looked suspiciously Wrangler-ish, which was awkward because this milestone is Pages-focused. We corrected that path and cleaned the docs so future us does not accidentally summon Worker ghosts."
           }
@@ -355,41 +397,83 @@
       },
       {
         "_type": "block",
-        "_key": "block0022",
+        "_key": "block0033",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0023",
+            "_key": "span0028",
             "marks": [],
-            "text": "Then came the classic combo: missing token moments, DNS propagation mood swings, and the legendary www subdomain drama. One check said \"cannot resolve host,\" the next said \"hello, 200 OK,\" but still refused to redirect to apex. In other words, www showed up to the party, then ignored the dress code."
+            "text": "Then came the classic combo: missing token moments, DNS propagation mood swings, and the legendary "
+          },
+          {
+            "_type": "span",
+            "_key": "span0029",
+            "marks": [
+              "code"
+            ],
+            "text": "www"
+          },
+          {
+            "_type": "span",
+            "_key": "span0030",
+            "marks": [],
+            "text": " subdomain drama. One check said \"cannot resolve host,\" the next said \"hello, 200 OK,\" but still refused to redirect to apex. In other words, "
+          },
+          {
+            "_type": "span",
+            "_key": "span0031",
+            "marks": [
+              "code"
+            ],
+            "text": "www"
+          },
+          {
+            "_type": "span",
+            "_key": "span0032",
+            "marks": [],
+            "text": " showed up to the party, then ignored the dress code."
           }
         ]
       },
       {
         "_type": "block",
-        "_key": "block0024",
+        "_key": "block0037",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0025",
+            "_key": "span0034",
             "marks": [],
-            "text": "Final status: MVP3 is closed, production is live, previews work, governance is solid, and the one known exception (www -> apex permanent redirect) is transparently recorded in the tracker."
+            "text": "Final status: MVP3 is closed, production is live, previews work, governance is solid, and the one known exception ("
+          },
+          {
+            "_type": "span",
+            "_key": "span0035",
+            "marks": [
+              "code"
+            ],
+            "text": "www -> apex"
+          },
+          {
+            "_type": "span",
+            "_key": "span0036",
+            "marks": [],
+            "text": " permanent redirect) is transparently recorded in the tracker."
           }
         ]
       },
       {
         "_type": "block",
-        "_key": "block0026",
+        "_key": "block0039",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0027",
+            "_key": "span0038",
             "marks": [],
             "text": "If MVP1 built the engine and MVP2 painted the car, MVP3 put license plates on it and drove it onto the highway, with a small \"check redirect\" sticker on the dashboard."
           }
@@ -411,13 +495,13 @@
     "body": [
       {
         "_type": "block",
-        "_key": "block0000",
+        "_key": "block0001",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0001",
+            "_key": "span0000",
             "marks": [],
             "text": "By changing the postsDir value to the right folder I have solved the CMS link that prevented me from writing blogs through my CMS portal"
           }
@@ -425,13 +509,13 @@
       },
       {
         "_type": "block",
-        "_key": "block0002",
+        "_key": "block0003",
         "style": "normal",
         "markDefs": [],
         "children": [
           {
             "_type": "span",
-            "_key": "span0003",
+            "_key": "span0002",
             "marks": [],
             "text": "This post has been eddited"
           }

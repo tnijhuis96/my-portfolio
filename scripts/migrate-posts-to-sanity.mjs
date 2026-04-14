@@ -37,26 +37,113 @@ function decodeHtmlEntities(text = "") {
   });
 }
 
-function readInlineText(tokens = []) {
-  return tokens
-    .map((token) => {
-      if (token.type === "br") {
-        return "\n";
-      }
-
-      if (Array.isArray(token.tokens) && token.tokens.length > 0) {
-        return readInlineText(token.tokens);
-      }
-
-      return token.text ?? "";
-    })
-    .join("");
+function normalizeSpanText(text = "") {
+  return decodeHtmlEntities(text).replace(/\s+\n/g, "\n");
 }
 
-function createBlock(nextKey, text, overrides = {}) {
-  const normalizedText = decodeHtmlEntities(text).replace(/\s+\n/g, "\n").trim();
+function appendSpan(nextKey, children, text, marks = []) {
+  const normalizedText = normalizeSpanText(text);
 
   if (!normalizedText) {
+    return;
+  }
+
+  const normalizedMarks = [...new Set(marks)];
+  const previousChild = children.at(-1);
+
+  if (
+    previousChild &&
+    previousChild._type === "span" &&
+    JSON.stringify(previousChild.marks) === JSON.stringify(normalizedMarks)
+  ) {
+    previousChild.text += normalizedText;
+    return;
+  }
+
+  children.push({
+    _type: "span",
+    _key: nextKey("span"),
+    marks: normalizedMarks,
+    text: normalizedText
+  });
+}
+
+function trimChildren(children = []) {
+  const normalizedChildren = children
+    .map((child) => ({ ...child }))
+    .filter((child) => typeof child.text === "string" && child.text.length > 0);
+
+  if (normalizedChildren.length === 0) {
+    return [];
+  }
+
+  if (!normalizedChildren[0].marks?.includes("code")) {
+    normalizedChildren[0].text = normalizedChildren[0].text.replace(/^\s+/, "");
+  }
+
+  const lastChild = normalizedChildren[normalizedChildren.length - 1];
+  if (!lastChild.marks?.includes("code")) {
+    lastChild.text = lastChild.text.replace(/\s+$/, "");
+  }
+
+  return normalizedChildren.filter((child) => child.text.length > 0);
+}
+
+function tokensToChildren(nextKey, tokens = [], activeMarks = []) {
+  const children = [];
+
+  for (const token of tokens) {
+    if (token.type === "br") {
+      appendSpan(nextKey, children, "\n", activeMarks);
+      continue;
+    }
+
+    if (token.type === "codespan") {
+      appendSpan(nextKey, children, token.text ?? "", [...activeMarks, "code"]);
+      continue;
+    }
+
+    if (token.type === "strong") {
+      children.push(...tokensToChildren(nextKey, token.tokens ?? [], [...activeMarks, "strong"]));
+      continue;
+    }
+
+    if (token.type === "em") {
+      children.push(...tokensToChildren(nextKey, token.tokens ?? [], [...activeMarks, "em"]));
+      continue;
+    }
+
+    if (token.type === "del") {
+      children.push(...tokensToChildren(nextKey, token.tokens ?? [], [...activeMarks, "strike-through"]));
+      continue;
+    }
+
+    if (Array.isArray(token.tokens) && token.tokens.length > 0) {
+      children.push(...tokensToChildren(nextKey, token.tokens, activeMarks));
+      continue;
+    }
+
+    appendSpan(nextKey, children, token.text ?? "", activeMarks);
+  }
+
+  return children;
+}
+
+function createBlock(nextKey, content, overrides = {}) {
+  const children = trimChildren(
+    Array.isArray(content)
+      ? content
+      : [
+          {
+            _type: "span",
+            _key: nextKey("span"),
+            marks: [],
+            text: normalizeSpanText(content)
+          }
+        ]
+  );
+
+  if (children.length === 0) {
     return null;
   }
 
@@ -65,36 +152,45 @@ function createBlock(nextKey, text, overrides = {}) {
     _key: nextKey("block"),
     style: "normal",
     markDefs: [],
-    children: [
-      {
-        _type: "span",
-        _key: nextKey("span"),
-        marks: [],
-        text: normalizedText
-      }
-    ],
+    children,
     ...overrides
   };
 }
 
-function readListItemText(item) {
+function readListItemChildren(nextKey, item) {
   if (!Array.isArray(item.tokens) || item.tokens.length === 0) {
-    return item.text ?? "";
+    return tokensToChildren(nextKey, [{ text: item.text ?? "" }]);
   }
 
-  return item.tokens
+  return trimChildren(
+    item.tokens
     .map((token) => {
       if (token.type === "text" && Array.isArray(token.tokens)) {
-        return readInlineText(token.tokens);
+        return tokensToChildren(nextKey, token.tokens);
       }
 
       if (Array.isArray(token.tokens) && token.tokens.length > 0) {
-        return readInlineText(token.tokens);
+        return tokensToChildren(nextKey, token.tokens);
       }
 
-      return token.text ?? "";
+      return tokensToChildren(nextKey, [{ text: token.text ?? "" }]);
     })
-    .join("\n");
+    .flatMap((segment, index) => {
+      if (index === 0) {
+        return segment;
+      }
+
+      return [
+        {
+          _type: "span",
+          _key: nextKey("span"),
+          marks: [],
+          text: "\n"
+        },
+        ...segment
+      ];
+    })
+  );
 }
 
 function markdownToPortableText(markdown = "") {
@@ -106,7 +202,7 @@ function markdownToPortableText(markdown = "") {
       case "space":
         break;
       case "heading": {
-        const block = createBlock(nextKey, readInlineText(token.tokens), {
+        const block = createBlock(nextKey, tokensToChildren(nextKey, token.tokens), {
           style: token.depth >= 1 && token.depth <= 4 ? "h" + token.depth : "normal"
         });
         if (block) {
@@ -115,7 +211,7 @@ function markdownToPortableText(markdown = "") {
         break;
       }
       case "paragraph": {
-        const block = createBlock(nextKey, readInlineText(token.tokens));
+        const block = createBlock(nextKey, tokensToChildren(nextKey, token.tokens));
         if (block) {
           blocks.push(block);
         }
@@ -123,7 +219,7 @@ function markdownToPortableText(markdown = "") {
       }
       case "list":
         for (const item of token.items) {
-          const block = createBlock(nextKey, readListItemText(item), {
+          const block = createBlock(nextKey, readListItemChildren(nextKey, item), {
             listItem: token.ordered ? "number" : "bullet",
             level: 1
           });
@@ -133,20 +229,34 @@ function markdownToPortableText(markdown = "") {
         }
         break;
       case "blockquote": {
-        const blockquoteText = (token.tokens ?? [])
+        const blockquoteChildren = (token.tokens ?? [])
           .map((child) => {
             if (child.type === "paragraph") {
-              return readInlineText(child.tokens);
+              return tokensToChildren(nextKey, child.tokens);
             }
 
             if (Array.isArray(child.tokens) && child.tokens.length > 0) {
-              return readInlineText(child.tokens);
+              return tokensToChildren(nextKey, child.tokens);
             }
 
-            return child.text ?? "";
+            return tokensToChildren(nextKey, [{ text: child.text ?? "" }]);
           })
-          .join("\n\n");
-        const block = createBlock(nextKey, blockquoteText, { style: "blockquote" });
+          .flatMap((segment, index) => {
+            if (index === 0) {
+              return segment;
+            }
+
+            return [
+              {
+                _type: "span",
+                _key: nextKey("span"),
+                marks: [],
+                text: "\n\n"
+              },
+              ...segment
+            ];
+          });
+        const block = createBlock(nextKey, blockquoteChildren, { style: "blockquote" });
         if (block) {
           blocks.push(block);
         }
