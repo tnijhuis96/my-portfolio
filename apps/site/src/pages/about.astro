@@ -1,0 +1,37 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { sanityClient } from "../lib/sanity/client";
+import { aboutPageQuery } from "../lib/sanity/queries";
+
+type AboutPage = {
+  homeIntro?: string;
+  socialLinks?: string[];
+};
+
+const hasSanityConfig = Boolean(
+  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+);
+
+const aboutPage = hasSanityConfig
+  ? await sanityClient.fetch<AboutPage | null>(aboutPageQuery)
+  : null;
+---
+<BaseLayout title="About" description="About Thomas Nijhuis">
+  <section class="container">
+    <h1>About</h1>
+    <p>
+      {aboutPage?.homeIntro ??
+        "I write about technology, tools, AI automation, and the practical impact they have on smaller businesses."}
+    </p>
+    {(aboutPage?.socialLinks?.length ?? 0) > 0 && (
+      <>
+        <h2>Elsewhere</h2>
+        <ul>
+          {aboutPage?.socialLinks?.map((link) => (
+            <li><a href={link}>{link}</a></li>
+          ))}
+        </ul>
+      </>
+    )}
+  </section>
+</BaseLayout>

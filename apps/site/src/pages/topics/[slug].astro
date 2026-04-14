@@ -1,0 +1,57 @@
+---
+import ArticleList from "../../components/articles/ArticleList.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { mapArticle } from "../../lib/content/mapArticle";
+import { sanityClient } from "../../lib/sanity/client";
+import { topicDetailQuery } from "../../lib/sanity/queries";
+
+type TopicArticle = {
+  _id: string;
+  title: string;
+  slug: { current: string };
+  summary: string;
+  publishedAt?: string;
+  topics?: Array<{ title: string; slug: { current: string } }>;
+};
+
+type TopicDetail = {
+  title: string;
+  description: string;
+  articles?: TopicArticle[];
+};
+
+const hasSanityConfig = Boolean(
+  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+);
+
+export async function getStaticPaths() {
+  const hasSanityConfig = Boolean(
+    import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+  );
+
+  if (!hasSanityConfig) {
+    return [];
+  }
+
+  const slugs = await sanityClient.fetch<Array<{ slug: string }>>(
+    `*[_type == "topic" && defined(slug.current)][]{ "slug": slug.current }`
+  );
+
+  return slugs.map((entry) => ({ params: { slug: entry.slug } }));
+}
+
+const { slug = "" } = Astro.params;
+const topic =
+  hasSanityConfig && slug
+    ? await sanityClient.fetch<TopicDetail | null>(topicDetailQuery, { slug })
+    : null;
+
+const articles = (topic?.articles ?? []).map(mapArticle);
+---
+<BaseLayout title={topic?.title ?? "Topic"} description={topic?.description}>
+  <section class="container">
+    <h1>{topic?.title ?? "Topic unavailable"}</h1>
+    {topic?.description && <p>{topic.description}</p>}
+    <ArticleList articles={articles} />
+  </section>
+</BaseLayout>

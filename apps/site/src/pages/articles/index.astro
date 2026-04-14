@@ -1,0 +1,32 @@
+---
+import ArticleList from "../../components/articles/ArticleList.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { mapArticle } from "../../lib/content/mapArticle";
+import { sanityClient } from "../../lib/sanity/client";
+import { articleListQuery } from "../../lib/sanity/queries";
+
+type ArticleRecord = {
+  _id: string;
+  title: string;
+  slug: { current: string };
+  summary: string;
+  publishedAt?: string;
+  topics?: Array<{ title: string; slug: { current: string } }>;
+};
+
+const hasSanityConfig = Boolean(
+  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+);
+
+const rawArticles = hasSanityConfig
+  ? await sanityClient.fetch<ArticleRecord[]>(articleListQuery)
+  : [];
+
+const articles = rawArticles.map(mapArticle);
+---
+<BaseLayout title="Articles">
+  <section class="container">
+    <h1>Articles</h1>
+    <ArticleList articles={articles} />
+  </section>
+</BaseLayout>

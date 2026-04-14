@@ -1,9 +1,102 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import ArticleList from "../components/articles/ArticleList.astro";
+import CurrentFocus from "../components/home/CurrentFocus.astro";
+import FeaturedArticle from "../components/home/FeaturedArticle.astro";
+import Hero from "../components/home/Hero.astro";
+import TopicGrid from "../components/home/TopicGrid.astro";
+import { mapArticle } from "../lib/content/mapArticle";
+import { sanityClient } from "../lib/sanity/client";
+import { homeQuery } from "../lib/sanity/queries";
+
+type PortableTextBlock = {
+  children?: Array<{ text?: string }>;
+};
+
+type HomeTopic = {
+  title: string;
+  slug: { current: string };
+  description: string;
+};
+
+type HomeArticle = {
+  _id: string;
+  title: string;
+  slug: { current: string };
+  summary: string;
+  publishedAt?: string;
+  topics?: Array<{ title: string; slug: { current: string } }>;
+};
+
+type HomeData = {
+  settings?: { homeIntro?: string } | null;
+  featured?: HomeArticle | null;
+  articles?: HomeArticle[];
+  topics?: HomeTopic[];
+  now?: {
+    title?: string;
+    body?: PortableTextBlock[];
+  } | null;
+};
+
+const hasSanityConfig = Boolean(
+  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+);
+
+function blocksToText(blocks: PortableTextBlock[] = []) {
+  return blocks
+    .map((block) =>
+      (block.children ?? [])
+        .map((child) => child.text?.trim() ?? "")
+        .join("")
+        .trim()
+    )
+    .filter(Boolean)
+    .join(" ");
+}
+
+const fallbackData: HomeData = {
+  settings: {
+    homeIntro: "Thoughts on technology, tools, AI automation, and SME impact."
+  },
+  featured: null,
+  articles: [],
+  topics: [],
+  now: {
+    title: "Current focus",
+    body: []
+  }
+};
+
+const data = hasSanityConfig ? await sanityClient.fetch<HomeData>(homeQuery) : fallbackData;
+const articles = (data.articles ?? []).map(mapArticle);
+const featured = data.featured ? mapArticle(data.featured) : null;
+const currentFocusBody =
+  blocksToText(data.now?.body) || "A short, authored snapshot from Sanity.";
 ---
 <BaseLayout title="Thomas Nijhuis">
-  <section>
-    <h1>Understanding what modern IT is changing and why it matters.</h1>
-    <p>Technology, tools, AI automation, and SME impact.</p>
+  <Hero
+    intro={
+      data.settings?.homeIntro ?? fallbackData.settings?.homeIntro ?? "Technology, tools, AI automation, and SME impact."
+    }
+  />
+  <CurrentFocus title={data.now?.title ?? "Current focus"} body={currentFocusBody} />
+  {featured && (
+    <FeaturedArticle
+      title={featured.title}
+      href={`/articles/${featured.slug}/`}
+      summary={featured.summary}
+    />
+  )}
+  <TopicGrid
+    topics={(data.topics ?? []).map((topic) => ({
+      title: topic.title,
+      slug: topic.slug.current,
+      description: topic.description
+    }))}
+  />
+  <section class="container">
+    <h2>Recent writing</h2>
+    <ArticleList articles={articles} />
   </section>
 </BaseLayout>

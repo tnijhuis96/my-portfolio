@@ -1,0 +1,32 @@
+---
+import TopicGrid from "../../components/home/TopicGrid.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { sanityClient } from "../../lib/sanity/client";
+import { topicListQuery } from "../../lib/sanity/queries";
+
+type TopicRecord = {
+  title: string;
+  slug: { current: string };
+  description: string;
+};
+
+const hasSanityConfig = Boolean(
+  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+);
+
+const topics = hasSanityConfig
+  ? await sanityClient.fetch<TopicRecord[]>(topicListQuery)
+  : [];
+---
+<BaseLayout title="Topics">
+  <section class="container">
+    <h1>Topics</h1>
+  </section>
+  <TopicGrid
+    topics={topics.map((topic) => ({
+      title: topic.title,
+      slug: topic.slug.current,
+      description: topic.description
+    }))}
+  />
+</BaseLayout>

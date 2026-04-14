@@ -1,0 +1,71 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { sanityClient } from "../../lib/sanity/client";
+import { articleDetailQuery } from "../../lib/sanity/queries";
+
+type PortableTextBlock = {
+  children?: Array<{ text?: string }>;
+};
+
+type ArticleDetail = {
+  title: string;
+  summary: string;
+  body?: PortableTextBlock[];
+  topics?: Array<{ title: string; slug: { current: string } }>;
+};
+
+const hasSanityConfig = Boolean(
+  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+);
+
+function blocksToParagraphs(blocks: PortableTextBlock[] = []) {
+  return blocks
+    .map((block) =>
+      (block.children ?? [])
+        .map((child) => child.text?.trim() ?? "")
+        .join("")
+        .trim()
+    )
+    .filter(Boolean);
+}
+
+export async function getStaticPaths() {
+  const hasSanityConfig = Boolean(
+    import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
+  );
+
+  if (!hasSanityConfig) {
+    return [];
+  }
+
+  const slugs = await sanityClient.fetch<Array<{ slug: string }>>(
+    `*[_type == "article" && status == "published" && defined(slug.current)][]{ "slug": slug.current }`
+  );
+
+  return slugs.map((entry) => ({ params: { slug: entry.slug } }));
+}
+
+const { slug = "" } = Astro.params;
+const article =
+  hasSanityConfig && slug
+    ? await sanityClient.fetch<ArticleDetail | null>(articleDetailQuery, { slug })
+    : null;
+
+const paragraphs = blocksToParagraphs(article?.body);
+---
+<BaseLayout title={article?.title ?? "Article"} description={article?.summary}>
+  <article class="container">
+    <h1>{article?.title ?? "Article unavailable"}</h1>
+    {article?.summary && <p>{article.summary}</p>}
+    {(article?.topics?.length ?? 0) > 0 && (
+      <p>
+        Topics:
+        {" "}
+        {article?.topics?.map((topic) => (
+          <a href={`/topics/${topic.slug.current}/`}>{topic.title}</a>
+        ))}
+      </p>
+    )}
+    {paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+  </article>
+</BaseLayout>
