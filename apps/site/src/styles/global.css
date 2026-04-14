@@ -9,7 +9,6 @@
   --max-width: 76rem;
   --reading-width: 44rem;
   --radius-lg: 1.5rem;
-  --radius-md: 1rem;
   --shadow-soft: 0 18px 48px rgba(28, 33, 43, 0.08);
 }
 
@@ -122,7 +121,7 @@ a {
 
 .hero h1,
 .featured-article h2,
-section h2,
+.reading-shell section.container > h2,
 .article-card h3,
 .topic-card h3 {
   margin: 0;
@@ -143,7 +142,7 @@ section h2,
   color: var(--muted);
 }
 
-.container > h2 {
+.reading-shell section.container > h2 {
   margin-bottom: 0.75rem;
   font-size: clamp(1.65rem, 2.5vw, 2.25rem);
 }
