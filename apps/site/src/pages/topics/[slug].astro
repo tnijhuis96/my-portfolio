@@ -2,7 +2,7 @@
 import ArticleList from "../../components/articles/ArticleList.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { mapArticle } from "../../lib/content/mapArticle";
-import { sanityClient } from "../../lib/sanity/client";
+import { hasSanityConfig, sanityClient } from "../../lib/sanity/client";
 import { topicDetailQuery } from "../../lib/sanity/queries";
 
 type TopicArticle = {
@@ -20,15 +20,7 @@ type TopicDetail = {
   articles?: TopicArticle[];
 };
 
-const hasSanityConfig = Boolean(
-  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
-);
-
 export async function getStaticPaths() {
-  const hasSanityConfig = Boolean(
-    import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
-  );
-
   if (!hasSanityConfig) {
     return [];
   }
