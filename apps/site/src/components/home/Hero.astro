@@ -1,0 +1,12 @@
+---
+interface Props {
+  intro: string;
+}
+
+const { intro } = Astro.props;
+---
+<section class="hero container">
+  <p class="eyebrow">Analyst Journal</p>
+  <h1>Understanding tools, AI automation, and what they change for small businesses.</h1>
+  <p>{intro}</p>
+</section>

@@ -1,0 +1,13 @@
+---
+interface Article {
+  slug: string;
+  title: string;
+  summary: string;
+}
+
+const { article } = Astro.props as { article: Article };
+---
+<article class="article-card">
+  <h3><a href={`/articles/${article.slug}/`}>{article.title}</a></h3>
+  <p>{article.summary}</p>
+</article>

@@ -1,0 +1,14 @@
+---
+import ArticleCard from "./ArticleCard.astro";
+
+interface Article {
+  slug: string;
+  title: string;
+  summary: string;
+}
+
+const { articles } = Astro.props as { articles: Article[] };
+---
+<div class="article-list">
+  {articles.map((article) => <ArticleCard article={article} />)}
+</div>

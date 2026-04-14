@@ -1,0 +1,14 @@
+---
+interface Props {
+  title: string;
+  href: string;
+  summary: string;
+}
+
+const { title, href, summary } = Astro.props;
+---
+<article class="featured-article container">
+  <p class="eyebrow">Featured writing</p>
+  <h2><a href={href}>{title}</a></h2>
+  <p>{summary}</p>
+</article>
