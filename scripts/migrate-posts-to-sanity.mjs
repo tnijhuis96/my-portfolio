@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { marked } from "marked";
 
 const inputPath = new URL("./migration/article-export.json", import.meta.url);
+const outputPath = new URL("./migration/article-import-dry-run.json", import.meta.url);
 const input = JSON.parse(await fs.readFile(inputPath, "utf8"));
 
 if (!Array.isArray(input)) {
@@ -175,4 +176,6 @@ const documents = input.map((entry) => {
   };
 });
 
-console.log(JSON.stringify(documents, null, 2));
+const output = JSON.stringify(documents, null, 2);
+await fs.writeFile(outputPath, output + "\n");
+console.log(output);
