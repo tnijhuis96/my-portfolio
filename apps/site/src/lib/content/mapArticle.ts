@@ -1,4 +1,5 @@
 import { mapTopic } from "./mapTopic";
+import type { SiteArticle } from "./types";
 
 export function mapArticle(input: {
   _id: string;
@@ -7,7 +8,7 @@ export function mapArticle(input: {
   summary: string;
   publishedAt?: string;
   topics?: Array<{ title: string; slug: { current: string } }>;
-}) {
+}): SiteArticle {
   return {
     id: input._id,
     title: input.title,
