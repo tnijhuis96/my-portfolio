@@ -10,6 +10,11 @@
     "summary": "Github Copilot and I redesigned the look and feel of the entire website",
     "publishedAt": "2026-03-08T16:05:02.550Z",
     "status": "published",
+    "tags": [
+      "devlog",
+      "milestone",
+      "design"
+    ],
     "body": [
       {
         "_type": "block",
@@ -186,6 +191,11 @@
     "summary": "Cloudflare launch, edge baseline, and a few DNS plot twists",
     "publishedAt": "2026-03-09T17:45:00.000Z",
     "status": "published",
+    "tags": [
+      "devlog",
+      "milestone",
+      "cloudflare"
+    ],
     "body": [
       {
         "_type": "block",
@@ -408,6 +418,10 @@
     "summary": "Changing the path in build.js solved the file origin error",
     "publishedAt": "2026-03-08T10:41:49.273Z",
     "status": "published",
+    "tags": [
+      "devlog",
+      "engineering"
+    ],
     "body": [
       {
         "_type": "block",

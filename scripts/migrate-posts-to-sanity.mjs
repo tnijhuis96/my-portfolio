@@ -154,8 +154,16 @@ function markdownToPortableText(markdown = "") {
 const seenSlugs = new Set();
 
 const documents = input.map((entry) => {
-  if (!entry.title || !entry.slug || !entry.summary || !entry.publishedAt || typeof entry.bodyMarkdown !== "string") {
-    throw new Error("Each migration entry must include title, slug, summary, publishedAt, and bodyMarkdown.");
+  if (
+    !entry.title ||
+    !entry.slug ||
+    !entry.summary ||
+    !entry.publishedAt ||
+    !entry.status ||
+    !Array.isArray(entry.tags) ||
+    typeof entry.bodyMarkdown !== "string"
+  ) {
+    throw new Error("Each migration entry must include title, slug, summary, publishedAt, status, tags, and bodyMarkdown.");
   }
 
   if (seenSlugs.has(entry.slug)) {
@@ -171,7 +179,8 @@ const documents = input.map((entry) => {
     slug: { _type: "slug", current: entry.slug },
     summary: entry.summary,
     publishedAt: entry.publishedAt,
-    status: "published",
+    status: entry.status,
+    tags: [...entry.tags],
     body: markdownToPortableText(entry.bodyMarkdown)
   };
 });
