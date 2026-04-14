@@ -4,7 +4,7 @@
 - `master`
 
 ## Preview branch
-- `feat/analyst-journal-rebuild`
+- Temporary for the rebuild phase: `feat/analyst-journal-rebuild`
 
 ## Build command
 - `npm run build:new-site`

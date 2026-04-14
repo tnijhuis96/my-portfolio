@@ -31,8 +31,6 @@
     "backup:weekly:systemd:status": "node scripts/weekly-backup-systemd.js status",
     "deploy": "wrangler deploy",
     "deploy:gh-pages": "npm run build && gh-pages -d dist",
-    "build:site": "npm run build --workspace apps/site",
-    "dev:site": "npm run dev --workspace apps/site",
     "build:studio": "npm run build --workspace apps/studio"
   },
   "keywords": [],
