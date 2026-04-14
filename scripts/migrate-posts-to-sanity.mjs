@@ -16,6 +16,27 @@ function createKeyFactory() {
   };
 }
 
+const namedHtmlEntities = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: '"'
+};
+
+function decodeHtmlEntities(text = "") {
+  return text.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    if (entity[0] === "#") {
+      const isHex = entity[1]?.toLowerCase() === "x";
+      const codePoint = Number.parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    }
+
+    return namedHtmlEntities[entity.toLowerCase()] ?? match;
+  });
+}
+
 function readInlineText(tokens = []) {
   return tokens
     .map((token) => {
@@ -33,7 +54,7 @@ function readInlineText(tokens = []) {
 }
 
 function createBlock(nextKey, text, overrides = {}) {
-  const normalizedText = text.replace(/\s+\n/g, "\n").trim();
+  const normalizedText = decodeHtmlEntities(text).replace(/\s+\n/g, "\n").trim();
 
   if (!normalizedText) {
     return null;
@@ -125,7 +146,7 @@ function markdownToPortableText(markdown = "") {
             return child.text ?? "";
           })
           .join("\n\n");
-        const block = createBlock(nextKey, blockquoteText);
+        const block = createBlock(nextKey, blockquoteText, { style: "blockquote" });
         if (block) {
           blocks.push(block);
         }
@@ -180,7 +201,7 @@ const documents = input.map((entry) => {
     summary: entry.summary,
     publishedAt: entry.publishedAt,
     status: entry.status,
-    tags: [...entry.tags],
+    // Legacy tags stay in the export JSON for future mapping, but the current article schema has no tags field.
     body: markdownToPortableText(entry.bodyMarkdown)
   };
 });

@@ -10,11 +10,6 @@
     "summary": "Github Copilot and I redesigned the look and feel of the entire website",
     "publishedAt": "2026-03-08T16:05:02.550Z",
     "status": "published",
-    "tags": [
-      "devlog",
-      "milestone",
-      "design"
-    ],
     "body": [
       {
         "_type": "block",
@@ -191,11 +186,6 @@
     "summary": "Cloudflare launch, edge baseline, and a few DNS plot twists",
     "publishedAt": "2026-03-09T17:45:00.000Z",
     "status": "published",
-    "tags": [
-      "devlog",
-      "milestone",
-      "cloudflare"
-    ],
     "body": [
       {
         "_type": "block",
@@ -207,7 +197,7 @@
             "_type": "span",
             "_key": "span0001",
             "marks": [],
-            "text": "MVP3 was the &quot;ship it to the internet&quot; milestone, where this portfolio graduated from local hero to globally reachable citizen on Cloudflare Pages."
+            "text": "MVP3 was the \"ship it to the internet\" milestone, where this portfolio graduated from local hero to globally reachable citizen on Cloudflare Pages."
           }
         ]
       },
@@ -373,7 +363,7 @@
             "_type": "span",
             "_key": "span0023",
             "marks": [],
-            "text": "Then came the classic combo: missing token moments, DNS propagation mood swings, and the legendary www subdomain drama. One check said &quot;cannot resolve host,&quot; the next said &quot;hello, 200 OK,&quot; but still refused to redirect to apex. In other words, www showed up to the party, then ignored the dress code."
+            "text": "Then came the classic combo: missing token moments, DNS propagation mood swings, and the legendary www subdomain drama. One check said \"cannot resolve host,\" the next said \"hello, 200 OK,\" but still refused to redirect to apex. In other words, www showed up to the party, then ignored the dress code."
           }
         ]
       },
@@ -387,7 +377,7 @@
             "_type": "span",
             "_key": "span0025",
             "marks": [],
-            "text": "Final status: MVP3 is closed, production is live, previews work, governance is solid, and the one known exception (www -&gt; apex permanent redirect) is transparently recorded in the tracker."
+            "text": "Final status: MVP3 is closed, production is live, previews work, governance is solid, and the one known exception (www -> apex permanent redirect) is transparently recorded in the tracker."
           }
         ]
       },
@@ -401,7 +391,7 @@
             "_type": "span",
             "_key": "span0027",
             "marks": [],
-            "text": "If MVP1 built the engine and MVP2 painted the car, MVP3 put license plates on it and drove it onto the highway, with a small &quot;check redirect&quot; sticker on the dashboard."
+            "text": "If MVP1 built the engine and MVP2 painted the car, MVP3 put license plates on it and drove it onto the highway, with a small \"check redirect\" sticker on the dashboard."
           }
         ]
       }
@@ -418,10 +408,6 @@
     "summary": "Changing the path in build.js solved the file origin error",
     "publishedAt": "2026-03-08T10:41:49.273Z",
     "status": "published",
-    "tags": [
-      "devlog",
-      "engineering"
-    ],
     "body": [
       {
         "_type": "block",
