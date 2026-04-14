@@ -41,7 +41,7 @@ const fallbackData: HomeData = {
   }
 };
 
-const data = hasSanityConfig ? await sanityClient.fetch<HomeData>(homeQuery) : fallbackData;
+const data: HomeData = hasSanityConfig ? await sanityClient.fetch<HomeData>(homeQuery) : fallbackData;
 const articles = (data.articles ?? []).map(mapArticle);
 const featured = data.featured ? mapArticle(data.featured) : null;
 const currentFocusBody =
