@@ -1,6 +1,10 @@
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import type { AstroComponentFactory } from "astro/runtime/server/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  articleSlugListQuery,
+  topicSlugListQuery
+} from "../src/lib/sanity/queries";
 
 type FetchImpl = (query: string, params?: Record<string, string>) => unknown;
 
@@ -37,9 +41,10 @@ afterEach(() => {
 
 describe("dynamic publication routes", () => {
   it("builds article static paths from fetched slugs", async () => {
-    const { getStaticPaths } = await loadArticleRoute(() => [{ slug: "ai-for-smes" }]);
+    const { getStaticPaths, fetchMock } = await loadArticleRoute(() => [{ slug: "ai-for-smes" }]);
 
     await expect(getStaticPaths()).resolves.toEqual([{ params: { slug: "ai-for-smes" } }]);
+    expect(fetchMock).toHaveBeenCalledWith(articleSlugListQuery);
   });
 
   it("renders article detail content from the Sanity boundary", async () => {
@@ -70,9 +75,10 @@ describe("dynamic publication routes", () => {
   });
 
   it("builds topic static paths from fetched slugs", async () => {
-    const { getStaticPaths } = await loadTopicRoute(() => [{ slug: "ai-automation" }]);
+    const { getStaticPaths, fetchMock } = await loadTopicRoute(() => [{ slug: "ai-automation" }]);
 
     await expect(getStaticPaths()).resolves.toEqual([{ params: { slug: "ai-automation" } }]);
+    expect(fetchMock).toHaveBeenCalledWith(topicSlugListQuery);
   });
 
   it("renders topic detail content from the Sanity boundary", async () => {

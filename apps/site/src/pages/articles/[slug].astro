@@ -3,7 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import { blocksToParagraphs, type PortableTextBlock } from "../../lib/content/portableText";
 import type { SanityArticleRecord } from "../../lib/content/sanity";
 import { hasSanityConfig, sanityClient } from "../../lib/sanity/client";
-import { articleDetailQuery } from "../../lib/sanity/queries";
+import { articleDetailQuery, articleSlugListQuery } from "../../lib/sanity/queries";
 
 type ArticleDetail = SanityArticleRecord & {
   body?: PortableTextBlock[];
@@ -14,9 +14,7 @@ export async function getStaticPaths() {
     return [];
   }
 
-  const slugs = await sanityClient.fetch<Array<{ slug: string }>>(
-    `*[_type == "article" && status == "published" && defined(slug.current)][]{ "slug": slug.current }`
-  );
+  const slugs = await sanityClient.fetch<Array<{ slug: string }>>(articleSlugListQuery);
 
   return slugs.map((entry) => ({ params: { slug: entry.slug } }));
 }

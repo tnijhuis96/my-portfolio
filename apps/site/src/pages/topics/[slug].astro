@@ -4,7 +4,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import { mapArticle } from "../../lib/content/mapArticle";
 import type { SanityArticleRecord } from "../../lib/content/sanity";
 import { hasSanityConfig, sanityClient } from "../../lib/sanity/client";
-import { topicDetailQuery } from "../../lib/sanity/queries";
+import { topicDetailQuery, topicSlugListQuery } from "../../lib/sanity/queries";
 
 type TopicDetail = {
   title: string;
@@ -17,9 +17,7 @@ export async function getStaticPaths() {
     return [];
   }
 
-  const slugs = await sanityClient.fetch<Array<{ slug: string }>>(
-    `*[_type == "topic" && defined(slug.current)][]{ "slug": slug.current }`
-  );
+  const slugs = await sanityClient.fetch<Array<{ slug: string }>>(topicSlugListQuery);
 
   return slugs.map((entry) => ({ params: { slug: entry.slug } }));
 }

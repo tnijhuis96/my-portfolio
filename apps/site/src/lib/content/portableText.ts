@@ -6,7 +6,7 @@ export function blocksToParagraphs(blocks: PortableTextBlock[] = []) {
   return blocks
     .map((block) =>
       (block.children ?? [])
-        .map((child) => child.text?.trim() ?? "")
+        .map((child) => child.text ?? "")
         .join("")
         .trim()
     )

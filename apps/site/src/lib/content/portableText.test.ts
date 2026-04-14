@@ -15,10 +15,20 @@ describe("portableText helpers", () => {
   ];
 
   it("returns trimmed non-empty paragraphs", () => {
-    expect(blocksToParagraphs(blocks)).toEqual(["Firstparagraph", "Secondparagraph"]);
+    expect(blocksToParagraphs(blocks)).toEqual(["First paragraph", "Second paragraph"]);
   });
 
   it("joins paragraphs into plain text", () => {
-    expect(blocksToPlainText(blocks)).toBe("Firstparagraph Secondparagraph");
+    expect(blocksToPlainText(blocks)).toBe("First paragraph Second paragraph");
+  });
+
+  it("preserves spaces across inline-formatted spans", () => {
+    expect(
+      blocksToParagraphs([
+        {
+          children: [{ text: " Hello " }, { text: "world" }, { text: " again " }]
+        }
+      ])
+    ).toEqual(["Hello world again"]);
   });
 });

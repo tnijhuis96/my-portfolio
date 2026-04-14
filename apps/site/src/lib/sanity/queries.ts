@@ -17,6 +17,10 @@ export const articleDetailQuery = `*[_type == "article" && status == "published"
   "topics": topics[]->{title, slug}
 }`;
 
+export const articleSlugListQuery = `*[_type == "article" && status == "published" && defined(slug.current)][]{
+  "slug": slug.current
+}`;
+
 export const homeQuery = `{
   "settings": *[_type == "siteSettings"][0],
   "featured": *[_type == "article" && status == "published"] | order(publishedAt desc)[0]{
@@ -64,6 +68,10 @@ export const topicDetailQuery = `*[_type == "topic" && slug.current == $slug][0]
     publishedAt,
     "topics": topics[]->{title, slug}
   }
+}`;
+
+export const topicSlugListQuery = `*[_type == "topic" && defined(slug.current)][]{
+  "slug": slug.current
 }`;
 
 export const nowPageQuery = `*[_type == "nowPage"][0]{
