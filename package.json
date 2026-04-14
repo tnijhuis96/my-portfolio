@@ -18,6 +18,10 @@
     "admin": "node adminServer.js",
     "preview": "wrangler dev",
     "preview:dist": "npx serve dist -l 4173",
+    "dev:new-site": "npm run dev --workspace apps/site",
+    "dev:studio": "npm run dev --workspace apps/studio",
+    "build:new-site": "npm run build --workspace apps/site",
+    "check:new-site": "npm run check --workspace apps/site && npm run test --workspace apps/site",
     "backup:posts": "node scripts/backup-posts.js",
     "backup:weekly:install": "node scripts/weekly-backup-cron.js install",
     "backup:weekly:remove": "node scripts/weekly-backup-cron.js remove",
@@ -29,8 +33,7 @@
     "deploy:gh-pages": "npm run build && gh-pages -d dist",
     "build:site": "npm run build --workspace apps/site",
     "dev:site": "npm run dev --workspace apps/site",
-    "build:studio": "npm run build --workspace apps/studio",
-    "dev:studio": "npm run dev --workspace apps/studio"
+    "build:studio": "npm run build --workspace apps/studio"
   },
   "keywords": [],
   "author": "Thomas Nijhuis",
