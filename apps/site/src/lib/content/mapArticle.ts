@@ -1,14 +1,8 @@
 import { mapTopic } from "./mapTopic";
+import type { SanityArticleRecord } from "./sanity";
 import type { SiteArticle } from "./types";
 
-export function mapArticle(input: {
-  _id: string;
-  title: string;
-  slug: { current: string };
-  summary: string;
-  publishedAt?: string;
-  topics?: Array<{ title: string; slug: { current: string } }>;
-}): SiteArticle {
+export function mapArticle(input: SanityArticleRecord): SiteArticle {
   return {
     id: input._id,
     title: input.title,

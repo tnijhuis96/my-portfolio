@@ -1,31 +1,13 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { sanityClient } from "../lib/sanity/client";
+import { blocksToParagraphs, type PortableTextBlock } from "../lib/content/portableText";
+import { hasSanityConfig, sanityClient } from "../lib/sanity/client";
 import { nowPageQuery } from "../lib/sanity/queries";
-
-type PortableTextBlock = {
-  children?: Array<{ text?: string }>;
-};
 
 type NowPage = {
   title?: string;
   body?: PortableTextBlock[];
 };
-
-const hasSanityConfig = Boolean(
-  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
-);
-
-function blocksToParagraphs(blocks: PortableTextBlock[] = []) {
-  return blocks
-    .map((block) =>
-      (block.children ?? [])
-        .map((child) => child.text?.trim() ?? "")
-        .join("")
-        .trim()
-    )
-    .filter(Boolean);
-}
 
 const nowPage = hasSanityConfig ? await sanityClient.fetch<NowPage | null>(nowPageQuery) : null;
 const paragraphs = blocksToParagraphs(nowPage?.body);

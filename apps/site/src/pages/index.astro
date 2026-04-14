@@ -6,12 +6,10 @@ import FeaturedArticle from "../components/home/FeaturedArticle.astro";
 import Hero from "../components/home/Hero.astro";
 import TopicGrid from "../components/home/TopicGrid.astro";
 import { mapArticle } from "../lib/content/mapArticle";
-import { sanityClient } from "../lib/sanity/client";
+import { blocksToPlainText, type PortableTextBlock } from "../lib/content/portableText";
+import type { SanityArticleRecord } from "../lib/content/sanity";
+import { hasSanityConfig, sanityClient } from "../lib/sanity/client";
 import { homeQuery } from "../lib/sanity/queries";
-
-type PortableTextBlock = {
-  children?: Array<{ text?: string }>;
-};
 
 type HomeTopic = {
   title: string;
@@ -19,41 +17,16 @@ type HomeTopic = {
   description: string;
 };
 
-type HomeArticle = {
-  _id: string;
-  title: string;
-  slug: { current: string };
-  summary: string;
-  publishedAt?: string;
-  topics?: Array<{ title: string; slug: { current: string } }>;
-};
-
 type HomeData = {
   settings?: { homeIntro?: string } | null;
-  featured?: HomeArticle | null;
-  articles?: HomeArticle[];
+  featured?: SanityArticleRecord | null;
+  articles?: SanityArticleRecord[];
   topics?: HomeTopic[];
   now?: {
     title?: string;
     body?: PortableTextBlock[];
   } | null;
 };
-
-const hasSanityConfig = Boolean(
-  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
-);
-
-function blocksToText(blocks: PortableTextBlock[] = []) {
-  return blocks
-    .map((block) =>
-      (block.children ?? [])
-        .map((child) => child.text?.trim() ?? "")
-        .join("")
-        .trim()
-    )
-    .filter(Boolean)
-    .join(" ");
-}
 
 const fallbackData: HomeData = {
   settings: {
@@ -72,7 +45,7 @@ const data = hasSanityConfig ? await sanityClient.fetch<HomeData>(homeQuery) : f
 const articles = (data.articles ?? []).map(mapArticle);
 const featured = data.featured ? mapArticle(data.featured) : null;
 const currentFocusBody =
-  blocksToText(data.now?.body) || "A short, authored snapshot from Sanity.";
+  blocksToPlainText(data.now?.body) || "A short, authored snapshot from Sanity.";
 ---
 <BaseLayout title="Thomas Nijhuis">
   <Hero

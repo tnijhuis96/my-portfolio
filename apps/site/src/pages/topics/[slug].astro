@@ -2,22 +2,14 @@
 import ArticleList from "../../components/articles/ArticleList.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { mapArticle } from "../../lib/content/mapArticle";
+import type { SanityArticleRecord } from "../../lib/content/sanity";
 import { hasSanityConfig, sanityClient } from "../../lib/sanity/client";
 import { topicDetailQuery } from "../../lib/sanity/queries";
-
-type TopicArticle = {
-  _id: string;
-  title: string;
-  slug: { current: string };
-  summary: string;
-  publishedAt?: string;
-  topics?: Array<{ title: string; slug: { current: string } }>;
-};
 
 type TopicDetail = {
   title: string;
   description: string;
-  articles?: TopicArticle[];
+  articles?: SanityArticleRecord[];
 };
 
 export async function getStaticPaths() {

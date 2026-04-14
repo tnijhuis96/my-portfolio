@@ -1,16 +1,12 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { sanityClient } from "../lib/sanity/client";
+import { hasSanityConfig, sanityClient } from "../lib/sanity/client";
 import { aboutPageQuery } from "../lib/sanity/queries";
 
 type AboutPage = {
   homeIntro?: string;
   socialLinks?: string[];
 };
-
-const hasSanityConfig = Boolean(
-  import.meta.env.PUBLIC_SANITY_PROJECT_ID && import.meta.env.PUBLIC_SANITY_DATASET
-);
 
 const aboutPage = hasSanityConfig
   ? await sanityClient.fetch<AboutPage | null>(aboutPageQuery)
