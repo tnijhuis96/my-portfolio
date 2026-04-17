@@ -3,7 +3,13 @@ export function normalizePostRecord(row) {
     id: row.id,
     slug: row.slug,
     title: row.title,
+    summary: row.summary,
+    body_markdown: row.body_markdown,
+    sanitized_html: row.sanitized_html,
     status: row.status,
+    published_at: row.published_at,
+    deleted_at: row.deleted_at,
+    updated_at: row.updated_at,
   };
 }
 
