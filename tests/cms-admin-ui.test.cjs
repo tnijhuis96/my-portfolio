@@ -256,7 +256,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
     slug: "hello-world",
     title: "Hello World",
     summary: "First summary",
-    bodyMarkdown: "# Hello",
+    body_markdown: "# Hello",
     status: "draft",
   };
 

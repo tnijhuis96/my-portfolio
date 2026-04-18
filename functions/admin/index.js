@@ -174,6 +174,10 @@ export async function onRequestGet() {
         return fallbackMessage;
       }
 
+      function getPostBodyMarkdown(post) {
+        return post?.body_markdown ?? post?.bodyMarkdown ?? "";
+      }
+
       function renderPostList() {
         const buttons = state.posts.map((post) => {
           const button = document.createElement("button");
@@ -253,7 +257,7 @@ export async function onRequestGet() {
           slugInput.value = result.post.slug || "";
           titleInput.value = result.post.title || "";
           summaryInput.value = result.post.summary || "";
-          bodyMarkdownInput.value = result.post.bodyMarkdown || "";
+          bodyMarkdownInput.value = getPostBodyMarkdown(result.post);
           revisionsList.textContent = EMPTY_REVISIONS_MESSAGE;
           editorStatus.textContent = options.statusMessage || "";
           return result.post;
