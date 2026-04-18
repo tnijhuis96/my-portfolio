@@ -1,13 +1,31 @@
-export function sanitizePostBody(markdown) {
-  return markdown.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-export function normalizePostInput(input) {
+function normalizeTrimmedString(value, fallback = "") {
+  const normalized = String(value ?? fallback).trim();
+  if (normalized) {
+    return normalized;
+  }
+
+  return String(fallback).trim();
+}
+
+export function sanitizePostBody(markdown) {
+  return escapeHtml(String(markdown ?? ""));
+}
+
+export function normalizePostInput(input = {}) {
   return {
-    slug: String(input.slug || "").trim(),
-    title: String(input.title || "").trim(),
-    summary: String(input.summary || "").trim(),
-    bodyMarkdown: String(input.bodyMarkdown || ""),
-    status: String(input.status || "draft"),
+    slug: normalizeTrimmedString(input.slug),
+    title: normalizeTrimmedString(input.title),
+    summary: normalizeTrimmedString(input.summary),
+    bodyMarkdown: String(input.bodyMarkdown ?? ""),
+    status: normalizeTrimmedString(input.status, "draft"),
   };
 }

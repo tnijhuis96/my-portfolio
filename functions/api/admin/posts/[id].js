@@ -5,9 +5,23 @@ export async function onRequestGet() {
 }
 
 export async function onRequestPut() {
-  return json({ ok: true });
+  return json(
+    {
+      ok: false,
+      error: "not_implemented",
+      message: "Post updates are not implemented in Task 5.",
+    },
+    { status: 501 },
+  );
 }
 
 export async function onRequestDelete() {
-  return json({ ok: true, deleted: true });
+  return json(
+    {
+      ok: false,
+      error: "not_implemented",
+      message: "Post deletion is not implemented in Task 5.",
+    },
+    { status: 501 },
+  );
 }

@@ -5,5 +5,12 @@ export async function onRequestGet() {
 }
 
 export async function onRequestPost() {
-  return json({ ok: true });
+  return json(
+    {
+      ok: false,
+      error: "not_implemented",
+      message: "Post creation is not implemented in Task 5.",
+    },
+    { status: 501 },
+  );
 }
