@@ -1,17 +1,16 @@
 import { json } from "../../_lib/json.js";
-import { writeAuditEvent } from "../../_lib/audit.js";
+import { clearSessionCookie, readSessionCookie } from "../../_lib/auth.js";
 
 export async function onRequestPost(context) {
-  await writeAuditEvent(context.env, {
-    action: "logout",
-    target_type: "admin_session",
-    target_id: null,
-    metadata: { ok: true },
-  });
+  const sessionId = readSessionCookie(context.request);
+  if (sessionId) {
+    await context.env.CMS_DB.prepare("DELETE FROM cms_sessions WHERE id = ?").bind(sessionId).run();
+  }
 
   return json({ ok: true }, {
     headers: {
       "cache-control": "no-store",
+      "set-cookie": clearSessionCookie(),
     },
   });
 }

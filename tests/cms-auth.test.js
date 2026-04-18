@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionCookie } from "../functions/_lib/auth.js";
+import {
+  clearSessionCookie,
+  createSessionCookie,
+  verifyPassword,
+} from "../functions/_lib/auth.js";
 import { assertCsrf } from "../functions/_lib/csrf.js";
 
 test("createSessionCookie sets secure admin cookie flags", () => {
@@ -24,4 +28,20 @@ test("assertCsrf rejects requests when the session is missing", () => {
     assert.equal(error.message, "Invalid CSRF token.");
     return true;
   });
+});
+
+test("clearSessionCookie expires the cms session cookie", () => {
+  const header = clearSessionCookie();
+  assert.match(header, /^cms_session=/);
+  assert.match(header, /Expires=/);
+  assert.match(header, /HttpOnly/);
+});
+
+test("verifyPassword returns false for a wrong password", async () => {
+  const ok = await verifyPassword(
+    "$2b$12$Vn4Y0Q0M0lQ5v0nB08Ww6eS8THvYxjEwRkn5I9WQm5M8f0g5q1n1u",
+    "wrong-password",
+  );
+
+  assert.equal(ok, false);
 });

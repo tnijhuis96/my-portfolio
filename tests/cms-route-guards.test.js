@@ -12,6 +12,7 @@ function createTestEnv(options = {}) {
   const state = {
     rateLimits: new Map(),
     auditLog: [],
+    sessions: new Map(),
     failAuditWrites: options.failAuditWrites ?? false,
     uniqueInsertRaceKeys: new Set(options.uniqueInsertRaceKeys ?? []),
     racedInsertKeys: new Set(),
@@ -173,6 +174,24 @@ function createTestEnv(options = {}) {
           return { success: true, meta: { changes: 1 } };
         }
 
+        if (query.startsWith("INSERT INTO cms_sessions")) {
+          const [id, userId, csrfToken, createdAt, expiresAt] = bindings;
+          state.sessions.set(id, {
+            id,
+            user_id: userId,
+            csrf_token: csrfToken,
+            created_at: createdAt,
+            expires_at: expiresAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (query.startsWith("DELETE FROM cms_sessions WHERE id = ?")) {
+          const [id] = bindings;
+          const deleted = state.sessions.delete(id);
+          return { success: true, meta: { changes: deleted ? 1 : 0 } };
+        }
+
         throw new Error(`Unsupported run() query: ${query}`);
       },
     };
@@ -180,6 +199,7 @@ function createTestEnv(options = {}) {
 
   return {
     env: {
+      CMS_PASSWORD_HASH: options.passwordHash ?? "$2b$12$x.iwrptMsEMdkZ4/OUMl9e.L/vFMdVRWidtFbmHwRbfc0vQkX/tya",
       CMS_DB: {
         prepare(query) {
           return buildStatement(query);
@@ -347,10 +367,17 @@ test("login route records a neutral attempt audit payload", async () => {
     env,
     request: new Request("https://example.com/api/admin/login", {
       method: "POST",
+      headers: {
+        "cf-access-authenticated-user-email": "admin@example.com",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ password: "test-password" }),
     }),
   });
 
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("set-cookie")?.startsWith("cms_session="), true);
+  assert.equal(state.sessions.size, 1);
   assert.equal(state.auditLog.length, 1);
   assert.deepEqual(
     JSON.parse(state.auditLog[0].metadata_json),
@@ -367,6 +394,8 @@ test("login route does not consume rate-limit quota when audit logging fails", a
       env,
       request: new Request("https://example.com/api/admin/login", {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: "test-password" }),
       }),
     }),
     /audit write failed/,
