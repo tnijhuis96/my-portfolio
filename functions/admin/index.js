@@ -97,6 +97,45 @@ export async function onRequestGet() {
         editorStatus.textContent = message;
       }
 
+      function parseRetryAfterSeconds(value) {
+        const seconds = Number.parseInt(value || "", 10);
+        return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+      }
+
+      function getLoginFailureMessage(response, result) {
+        if (response.status === 429) {
+          const retryAfter = parseRetryAfterSeconds(response.headers?.get("retry-after"));
+          if (retryAfter) {
+            return "Too many login attempts. Try again in "
+              + retryAfter
+              + " second"
+              + (retryAfter === 1 ? "" : "s")
+              + ".";
+          }
+
+          return "Too many login attempts. Try again shortly.";
+        }
+
+        if (result?.error === "invalid_credentials") {
+          return "Incorrect password. Try again.";
+        }
+
+        return "Unable to sign in right now.";
+      }
+
+      async function readJsonBody(response) {
+        const contentType = response.headers?.get("content-type") || "";
+        if (!contentType.toLowerCase().includes("application/json")) {
+          return null;
+        }
+
+        try {
+          return await response.json();
+        } catch {
+          return null;
+        }
+      }
+
       async function bootstrapSession(message) {
         try {
           const response = await fetch(window.CMS_ENDPOINTS.session, {
@@ -136,9 +175,14 @@ export async function onRequestGet() {
               password: passwordInput.value
             })
           });
-          const result = await response.json();
+          const result = await readJsonBody(response);
 
-          if (!response.ok || !result.ok || !result.authenticated) {
+          if (!response.ok) {
+            showLogin(getLoginFailureMessage(response, result));
+            return;
+          }
+
+          if (!result?.ok || !result.authenticated) {
             showLogin("Incorrect password. Try again.");
             return;
           }
