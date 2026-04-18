@@ -9,7 +9,17 @@ function readJson(relativePath) {
   return JSON.parse(fs.readFileSync(path.join(rootDir, relativePath), "utf8"));
 }
 
+function readText(relativePath) {
+  return fs.readFileSync(path.join(rootDir, relativePath), "utf8");
+}
+
 test("CMS ESM files are scoped with nested package metadata", () => {
   assert.deepEqual(readJson("functions/package.json"), { type: "module" });
   assert.deepEqual(readJson("tests/package.json"), { type: "module" });
+});
+
+test("CMS auth entrypoints use bcryptjs instead of native bcrypt", () => {
+  assert.match(readText("adminServer.js"), /require\("bcryptjs"\)/);
+  assert.match(readText("scripts/hash-cms-password.js"), /require\("bcryptjs"\)/);
+  assert.match(readText("functions/_lib/auth.js"), /from "bcryptjs"/);
 });

@@ -5,7 +5,7 @@ const path = require("path");
 const matter = require("gray-matter");
 const { exec } = require("child_process");
 const session = require("express-session");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
 const app = express();

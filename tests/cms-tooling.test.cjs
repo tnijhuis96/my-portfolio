@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawnSync } = require("node:child_process");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 const rootDir = path.resolve(__dirname, "..");
 const hashScript = path.join(rootDir, "scripts", "hash-cms-password.js");

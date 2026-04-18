@@ -31,6 +31,11 @@ function createTestEnv(options = {}) {
           return state.rateLimits.get(`${bucket}:${key}`) ?? null;
         }
 
+        if (query.includes("FROM cms_sessions")) {
+          const [id] = bindings;
+          return state.sessions.get(id) ?? null;
+        }
+
         throw new Error(`Unsupported first() query: ${query}`);
       },
       async run() {
@@ -361,7 +366,7 @@ test("writeAuditEvent persists audit rows to cms_audit_log", async () => {
   );
 });
 
-test("login route records a neutral attempt audit payload", async () => {
+test("login route records attempted and successful audit outcomes", async () => {
   const { env, state } = createTestEnv();
   const response = await onRequestPost({
     env,
@@ -378,10 +383,16 @@ test("login route records a neutral attempt audit payload", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("set-cookie")?.startsWith("cms_session="), true);
   assert.equal(state.sessions.size, 1);
-  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog.length, 2);
+  assert.equal(state.auditLog[0].action, "login_attempt");
+  assert.equal(state.auditLog[1].action, "login_success");
   assert.deepEqual(
     JSON.parse(state.auditLog[0].metadata_json),
     { stage: "attempted" },
+  );
+  assert.deepEqual(
+    JSON.parse(state.auditLog[1].metadata_json),
+    { stage: "success" },
   );
   assert.equal(state.rateLimits.get("login:single-admin").count, 1);
 });
@@ -404,17 +415,104 @@ test("login route does not consume rate-limit quota when audit logging fails", a
   assert.equal(state.rateLimits.size, 0);
 });
 
-test("logout route disables caching for the response", async () => {
-  const { env } = createTestEnv();
+test("login route records a failed audit outcome for invalid credentials", async () => {
+  const { env, state } = createTestEnv();
+  const response = await onRequestPost({
+    env,
+    request: new Request("https://example.com/api/admin/login", {
+      method: "POST",
+      headers: {
+        "cf-access-authenticated-user-email": "admin@example.com",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ password: "wrong-password" }),
+    }),
+  });
+
+  assert.equal(response.status, 401);
+  assert.equal(state.auditLog.length, 2);
+  assert.equal(state.auditLog[1].action, "login_failure");
+  assert.deepEqual(
+    JSON.parse(state.auditLog[1].metadata_json),
+    { stage: "failure", reason: "invalid_credentials" },
+  );
+});
+
+test("login route returns a structured 400 for invalid JSON", async () => {
+  const { env, state } = createTestEnv();
+  const response = await onRequestPost({
+    env,
+    request: new Request("https://example.com/api/admin/login", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: "{invalid",
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
+  assert.equal(state.rateLimits.size, 0);
+});
+
+test("logout route deletes the stored session, logs the event, and clears the cookie", async () => {
+  const { env, state } = createTestEnv();
+  state.sessions.set("session_123", {
+    id: "session_123",
+    user_id: "admin@example.com",
+    csrf_token: "csrf_123",
+    created_at: "2025-01-01T00:00:00.000Z",
+    expires_at: "2025-01-01T08:00:00.000Z",
+  });
+
   const response = await onRequestLogoutPost({
     env,
     request: new Request("https://example.com/api/admin/logout", {
       method: "POST",
+      headers: {
+        cookie: "cms_session=session_123",
+      },
     }),
   });
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(state.sessions.has("session_123"), false);
+  assert.match(response.headers.get("set-cookie") ?? "", /Secure/);
+  assert.match(response.headers.get("set-cookie") ?? "", /SameSite=Strict/);
+  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog[0].action, "logout");
+  assert.equal(state.auditLog[0].actor_user_id, "admin@example.com");
+  assert.deepEqual(
+    JSON.parse(state.auditLog[0].metadata_json),
+    { sessionId: "session_123" },
+  );
+});
+
+test("logout route still clears the cookie when audit logging fails", async () => {
+  const { env, state } = createTestEnv({ failAuditWrites: true });
+  state.sessions.set("session_123", {
+    id: "session_123",
+    user_id: "admin@example.com",
+    csrf_token: "csrf_123",
+    created_at: "2025-01-01T00:00:00.000Z",
+    expires_at: "2025-01-01T08:00:00.000Z",
+  });
+
+  const response = await onRequestLogoutPost({
+    env,
+    request: new Request("https://example.com/api/admin/logout", {
+      method: "POST",
+      headers: {
+        cookie: "cms_session=session_123",
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(state.sessions.has("session_123"), false);
+  assert.match(response.headers.get("set-cookie") ?? "", /^cms_session=/);
 });
 
 test("session route disables caching for the response", async () => {
@@ -424,4 +522,58 @@ test("session route disables caching for the response", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("session route returns the authenticated user for a valid session cookie", async () => {
+  const { env } = createTestEnv();
+  env.CMS_DB.prepare("INSERT INTO cms_sessions (id, user_id, csrf_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(
+      "session_123",
+      "admin@example.com",
+      "csrf_123",
+      "2025-01-01T00:00:00.000Z",
+      "2999-01-01T08:00:00.000Z",
+    )
+    .run();
+
+  const response = await onRequestSessionGet({
+    env,
+    request: new Request("https://example.com/api/admin/session", {
+      headers: {
+        cookie: "cms_session=session_123",
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    authenticated: true,
+    userId: "admin@example.com",
+    csrfToken: "csrf_123",
+  });
+});
+
+test("session route returns unauthenticated for an expired session", async () => {
+  const { env } = createTestEnv();
+  env.CMS_DB.prepare("INSERT INTO cms_sessions (id, user_id, csrf_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(
+      "session_123",
+      "admin@example.com",
+      "csrf_123",
+      "2025-01-01T00:00:00.000Z",
+      "2000-01-01T08:00:00.000Z",
+    )
+    .run();
+
+  const response = await onRequestSessionGet({
+    env,
+    request: new Request("https://example.com/api/admin/session", {
+      headers: {
+        cookie: "cms_session=session_123",
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { authenticated: false });
 });

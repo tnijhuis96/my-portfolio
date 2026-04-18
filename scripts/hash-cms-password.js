@@ -1,4 +1,4 @@
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 function readPasswordFromPipe() {
   return new Promise((resolve, reject) => {
