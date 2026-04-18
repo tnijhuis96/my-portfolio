@@ -5,6 +5,7 @@ import {
   normalizePostInput,
   sanitizePostBody,
 } from "../functions/_lib/content.js";
+import { buildDeployHeaders } from "../functions/_lib/deploy.js";
 import { normalizePostRecord } from "../functions/_lib/db.js";
 import {
   onRequestGet as onRequestPostGet,
@@ -136,4 +137,9 @@ test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
     migration,
     /CREATE UNIQUE INDEX cms_rate_limits_bucket_key_idx\s+ON cms_rate_limits\(bucket, key\);/,
   );
+});
+
+test("buildDeployHeaders keeps deploy secret server-side", () => {
+  const headers = buildDeployHeaders({ PAGES_DEPLOY_HOOK_SECRET: "secret" });
+  assert.equal(headers["x-deploy-secret"], "secret");
 });
