@@ -2,12 +2,13 @@ import { requireSession } from "../../../_lib/auth.js";
 import { json } from "../../../_lib/json.js";
 import { runAll, runOne } from "../../../_lib/db.js";
 import {
+  captureRevisionSnapshot,
   isDuplicateSlugConstraint,
   isPostValidationError,
   normalizePostInput,
   renderPostHtml,
   validatePostInput,
-  writePostRevision,
+  withRevisionWarning,
 } from "../../../_lib/content.js";
 
 export async function onRequestGet(context) {
@@ -94,18 +95,17 @@ export async function onRequestPut(context) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
-  try {
-    await writePostRevision(context.env, {
-      id: context.params.id,
-      title: body.title,
-      summary: body.summary,
-      body_markdown: body.bodyMarkdown,
-      sanitized_html: sanitizedHtml,
-      status: body.status,
-    }, now);
-  } catch {}
+  const revisionWarning = await captureRevisionSnapshot(context.env, {
+    id: context.params.id,
+    slug: body.slug,
+    title: body.title,
+    summary: body.summary,
+    body_markdown: body.bodyMarkdown,
+    sanitized_html: sanitizedHtml,
+    status: body.status,
+  }, now, { operation: "update" });
 
-  return json({ ok: true });
+  return json(withRevisionWarning({ ok: true }, revisionWarning));
 }
 
 export async function onRequestDelete(context) {

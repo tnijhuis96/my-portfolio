@@ -322,7 +322,17 @@ test("admin inline script wires post list, save, delete, and reset actions for t
         const body = JSON.parse(options.body);
         detailResponse = { ...detailResponse, ...body };
         listResponse = [{ ...listResponse[0], ...body }];
-        return createJsonResponse({ ok: true });
+        return createJsonResponse({
+          ok: true,
+          revisionState: "degraded",
+          warnings: [
+            {
+              code: "revision_snapshot_failed",
+              message: "Revision history warning: latest snapshot could not be stored.",
+              operation: "update",
+            },
+          ],
+        });
       }
 
       if (url === "/api/admin/posts/post-1" && options.method === "DELETE") {
@@ -374,6 +384,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
     status: "draft",
   });
   assert.match(elements["editor-status"].textContent, /saved/i);
+  assert.match(elements["editor-status"].textContent, /revision history warning/i);
   assert.equal(elements.title.value, "Updated Title");
 
   await elements["new-post"].click();
@@ -442,7 +453,7 @@ test("admin inline script renders revision states and refreshes after restoring 
   ];
   let detailResponse = {
     id: "post-1",
-    slug: "hello-world",
+    slug: "current-slug",
     title: "Hello World",
     summary: "First summary",
     body_markdown: "# Hello",
@@ -478,6 +489,7 @@ test("admin inline script renders revision states and refreshes after restoring 
       if (url === "/api/admin/revisions/revision-2/restore" && options.method === "POST") {
         detailResponse = {
           ...detailResponse,
+          slug: "restored-slug",
           title: "Restored title",
           summary: "Restored summary",
           body_markdown: "## Restored",
@@ -493,7 +505,18 @@ test("admin inline script renders revision states and refreshes after restoring 
           ],
         };
         listResponse = [{ ...listResponse[0], title: "Restored title", status: "published" }];
-        return createJsonResponse({ ok: true, restored: true });
+        return createJsonResponse({
+          ok: true,
+          restored: true,
+          revisionState: "degraded",
+          warnings: [
+            {
+              code: "revision_snapshot_failed",
+              message: "Revision history warning: latest snapshot could not be stored.",
+              operation: "restore",
+            },
+          ],
+        });
       }
 
       throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
@@ -555,9 +578,11 @@ test("admin inline script renders revision states and refreshes after restoring 
   );
   const restoreRequest = fetchCalls.find(({ url, options }) => url === "/api/admin/revisions/revision-2/restore" && options.method === "POST");
   assert.equal(restoreRequest.options.headers["x-csrf-token"], "csrf-123");
+  assert.equal(elements.slug.value, "restored-slug");
   assert.equal(elements.title.value, "Restored title");
   assert.equal(elements["post-list"].children[0].textContent, "Restored title");
   assert.match(elements["editor-status"].textContent, /revision restored/i);
+  assert.match(elements["editor-status"].textContent, /revision history warning/i);
   assert.equal(elements["revisions-list"].children.length, 1);
   assert.match(elements["revisions-list"].children[0].children[0].textContent, /Post-restore snapshot/);
 });
@@ -803,7 +828,18 @@ test("admin inline script shows inline failures for restore and publish outcomes
     {
       ok: true,
       status: 200,
-      body: { ok: true, publishState: "pending_deploy" },
+      body: {
+        ok: true,
+        publishState: "pending_deploy",
+        revisionState: "degraded",
+        warnings: [
+          {
+            code: "revision_snapshot_failed",
+            message: "Revision history warning: latest snapshot could not be stored.",
+            operation: "publish",
+          },
+        ],
+      },
       nextPost: { ...detailResponse, status: "published" },
       nextList: [{ ...listResponse[0], status: "published" }],
     },
@@ -895,6 +931,7 @@ test("admin inline script shows inline failures for restore and publish outcomes
   const publishRequest = fetchCalls.find(({ url, options }) => url === "/api/admin/posts/post-1/publish" && options.method === "POST");
   assert.equal(publishRequest.options.headers["x-csrf-token"], "csrf-123");
   assert.match(elements["editor-status"].textContent, /publish accepted|deploy triggered/i);
+  assert.match(elements["editor-status"].textContent, /revision history warning/i);
 
   await elements["publish-post"].click();
   await flushMicrotasks(10);

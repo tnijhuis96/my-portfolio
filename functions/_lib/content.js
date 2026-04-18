@@ -86,6 +86,8 @@ export function isDuplicateSlugConstraint(error) {
   return /unique constraint failed:\s*cms_posts\.slug/i.test(String(error?.message ?? error ?? ""));
 }
 
+const REVISION_SNAPSHOT_WARNING_MESSAGE = "Revision history warning: latest snapshot could not be stored.";
+
 class PostValidationError extends Error {
   constructor(fields) {
     super("required_field");
@@ -177,17 +179,16 @@ export async function createPost(env, input) {
     )
     .run();
 
-  try {
-    await writePostRevision(env, record, now);
-  } catch {}
-
-  return normalizePostRecord(record);
+  const normalizedRecord = normalizePostRecord(record);
+  const revisionWarning = await captureRevisionSnapshot(env, record, now, { operation: "create" });
+  return revisionWarning ? { ...normalizedRecord, revisionWarning } : normalizedRecord;
 }
 
 export async function writePostRevision(env, post, createdAt = new Date().toISOString()) {
   const record = {
     id: crypto.randomUUID(),
     post_id: post.id,
+    slug: post.slug,
     title: post.title,
     summary: post.summary,
     body_markdown: post.body_markdown ?? post.bodyMarkdown ?? "",
@@ -197,11 +198,12 @@ export async function writePostRevision(env, post, createdAt = new Date().toISOS
   };
 
   await env.CMS_DB.prepare(
-    "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
     .bind(
       record.id,
       record.post_id,
+      record.slug,
       record.title,
       record.summary,
       record.body_markdown,
@@ -212,4 +214,36 @@ export async function writePostRevision(env, post, createdAt = new Date().toISOS
     .run();
 
   return record;
+}
+
+export function getRevisionSnapshotWarning(operation) {
+  return {
+    code: "revision_snapshot_failed",
+    message: REVISION_SNAPSHOT_WARNING_MESSAGE,
+    operation,
+  };
+}
+
+export async function captureRevisionSnapshot(env, post, createdAt, options = {}) {
+  const operation = options.operation ?? "update";
+
+  try {
+    await writePostRevision(env, post, createdAt);
+    return null;
+  } catch (error) {
+    console.error(`[cms] ${operation} revision snapshot failed`, error);
+    return getRevisionSnapshotWarning(operation);
+  }
+}
+
+export function withRevisionWarning(payload, warning) {
+  if (!warning) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    revisionState: "degraded",
+    warnings: [warning],
+  };
 }

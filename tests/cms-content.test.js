@@ -201,17 +201,37 @@ function createContentTestEnv(options = {}) {
         }
 
         if (
-          normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ?"
+          normalizedQuery === "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ?"
+          || normalizedQuery === "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+          || normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ?"
           || normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
         ) {
-          const [title, summary, bodyMarkdown, sanitizedHtml, status, publishedAt, updatedAt, id] = bindings;
+          const hasSlug = normalizedQuery.startsWith("UPDATE cms_posts SET slug = ?,");
+          const [slugOrTitle, titleOrSummary, summaryOrBody, bodyOrHtml, htmlOrStatus, statusOrPublished, publishedOrUpdated, updatedOrId, idOrUndefined] = bindings;
+          const slug = hasSlug ? slugOrTitle : null;
+          const title = hasSlug ? titleOrSummary : slugOrTitle;
+          const summary = hasSlug ? summaryOrBody : titleOrSummary;
+          const bodyMarkdown = hasSlug ? bodyOrHtml : summaryOrBody;
+          const sanitizedHtml = hasSlug ? htmlOrStatus : bodyOrHtml;
+          const status = hasSlug ? statusOrPublished : htmlOrStatus;
+          const publishedAt = hasSlug ? publishedOrUpdated : statusOrPublished;
+          const updatedAt = hasSlug ? updatedOrId : publishedOrUpdated;
+          const id = hasSlug ? idOrUndefined : updatedOrId;
           const existing = state.posts.get(id);
           if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
             return { success: true, meta: { changes: 0 } };
           }
 
+          if (hasSlug) {
+            const duplicateSlugPost = findPostBySlug(slug);
+            if (duplicateSlugPost && duplicateSlugPost.id !== id) {
+              throw new Error("UNIQUE constraint failed: cms_posts.slug");
+            }
+          }
+
           state.posts.set(id, {
             ...existing,
+            ...(hasSlug ? { slug } : {}),
             title,
             summary,
             body_markdown: bodyMarkdown,
@@ -265,12 +285,23 @@ function createContentTestEnv(options = {}) {
 
         if (
           normalizedQuery
+          === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          || normalizedQuery
           === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         ) {
-          const [id, postId, title, summary, bodyMarkdown, sanitizedHtml, status, createdAt] = bindings;
+          const hasSlug = normalizedQuery.includes("(id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at)");
+          const [id, postId, slugOrTitle, titleOrSummary, summaryOrBody, bodyOrHtml, htmlOrStatus, statusOrCreated, createdAtOrUndefined] = bindings;
+          const slug = hasSlug ? slugOrTitle : null;
+          const title = hasSlug ? titleOrSummary : slugOrTitle;
+          const summary = hasSlug ? summaryOrBody : titleOrSummary;
+          const bodyMarkdown = hasSlug ? bodyOrHtml : summaryOrBody;
+          const sanitizedHtml = hasSlug ? htmlOrStatus : bodyOrHtml;
+          const status = hasSlug ? statusOrCreated : htmlOrStatus;
+          const createdAt = hasSlug ? createdAtOrUndefined : statusOrCreated;
           state.revisions.set(id, {
             id,
             post_id: postId,
+            slug,
             title,
             summary,
             body_markdown: bodyMarkdown,
@@ -649,6 +680,7 @@ test("real cms create update publish and restore flows persist revision history"
   const created = await createResponse.json();
   assert.equal(state.revisions.size, 1);
   const createdRevision = [...state.revisions.values()].find((revision) => revision.post_id === created.post.id);
+  assert.equal(createdRevision?.slug, "hello-world");
   assert.equal(createdRevision?.title, "Hello world");
   assert.equal(createdRevision?.status, "draft");
 
@@ -659,7 +691,7 @@ test("real cms create update publish and restore flows persist revision history"
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        slug: "hello-world",
+        slug: "updated-slug",
         title: "Updated title",
         summary: "Updated summary",
         bodyMarkdown: "# Updated",
@@ -670,7 +702,11 @@ test("real cms create update publish and restore flows persist revision history"
   assert.equal(updateResponse.status, 200);
   assert.equal(state.revisions.size, 2);
   assert.ok(
-    [...state.revisions.values()].some((revision) => revision.post_id === created.post.id && revision.title === "Updated title"),
+    [...state.revisions.values()].some((revision) =>
+      revision.post_id === created.post.id
+      && revision.slug === "updated-slug"
+      && revision.title === "Updated title"
+    ),
   );
 
   const publishResponse = await onRequestPostPublish(
@@ -696,6 +732,7 @@ test("real cms create update publish and restore flows persist revision history"
     revision.post_id === created.post.id && revision.status === "published"
   );
   assert.ok(publishedRevision);
+  assert.equal(publishedRevision.slug, "updated-slug");
   assert.equal(publishedRevision.title, state.posts.get(created.post.id).title);
   assert.equal(publishedRevision.summary, state.posts.get(created.post.id).summary);
   assert.equal(publishedRevision.body_markdown, state.posts.get(created.post.id).body_markdown);
@@ -711,17 +748,24 @@ test("real cms create update publish and restore flows persist revision history"
   }));
   assert.equal(restoreResponse.status, 200);
   assert.equal(state.revisions.size, 4);
+  assert.equal(state.posts.get(created.post.id).slug, "hello-world");
   assert.ok(
-    [...state.revisions.values()].some((revision) => revision.post_id === created.post.id && revision.title === "Hello world"),
+    [...state.revisions.values()].some((revision) =>
+      revision.post_id === created.post.id
+      && revision.slug === "hello-world"
+      && revision.title === "Hello world"
+    ),
   );
 });
 
-test("post update, publish, and restore do not fail after the main mutation when revision snapshot writes fail", async () => {
+test("post update, publish, and restore return explicit revision warnings when snapshot writes fail", async () => {
   const revisionInsertError = new Error("revision insert failed");
   const { env, state } = createContentTestEnv({
     async onRun({ normalizedQuery }) {
       if (
         normalizedQuery
+        === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        || normalizedQuery
         === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       ) {
         throw revisionInsertError;
@@ -744,6 +788,7 @@ test("post update, publish, and restore do not fail after the main mutation when
   state.revisions.set("revision_1", {
     id: "revision_1",
     post_id: "post_1",
+    slug: "restored-slug",
     title: "Restored title",
     summary: "Restored summary",
     body_markdown: "## Restored",
@@ -769,7 +814,17 @@ test("post update, publish, and restore do not fail after the main mutation when
     }),
   }));
   assert.equal(updateResponse.status, 200);
-  assert.deepEqual(await updateResponse.json(), { ok: true });
+  assert.deepEqual(await updateResponse.json(), {
+    ok: true,
+    revisionState: "degraded",
+    warnings: [
+      {
+        code: "revision_snapshot_failed",
+        message: "Revision history warning: latest snapshot could not be stored.",
+        operation: "update",
+      },
+    ],
+  });
   assert.equal(state.posts.get("post_1").title, "Updated title");
 
   const publishResponse = await onRequestPostPublish(
@@ -793,6 +848,14 @@ test("post update, publish, and restore do not fail after the main mutation when
   assert.deepEqual(await publishResponse.json(), {
     ok: true,
     publishState: "pending_deploy",
+    revisionState: "degraded",
+    warnings: [
+      {
+        code: "revision_snapshot_failed",
+        message: "Revision history warning: latest snapshot could not be stored.",
+        operation: "publish",
+      },
+    ],
   });
   assert.equal(state.posts.get("post_1").status, "published");
 
@@ -803,17 +866,31 @@ test("post update, publish, and restore do not fail after the main mutation when
     url: "https://example.com/api/admin/revisions/revision_1/restore",
   }));
   assert.equal(restoreResponse.status, 200);
-  assert.deepEqual(await restoreResponse.json(), { ok: true, restored: true });
+  assert.deepEqual(await restoreResponse.json(), {
+    ok: true,
+    restored: true,
+    revisionState: "degraded",
+    warnings: [
+      {
+        code: "revision_snapshot_failed",
+        message: "Revision history warning: latest snapshot could not be stored.",
+        operation: "restore",
+      },
+    ],
+  });
+  assert.equal(state.posts.get("post_1").slug, "restored-slug");
   assert.equal(state.posts.get("post_1").title, "Restored title");
   assert.equal(state.revisions.size, 1);
 });
 
-test("post create does not fail after the main mutation when revision snapshot writes fail", async () => {
+test("post create returns an explicit revision warning when snapshot writes fail", async () => {
   const revisionInsertError = new Error("revision insert failed");
   const { env, state } = createContentTestEnv({
     async onRun({ normalizedQuery }) {
       if (
         normalizedQuery
+        === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        || normalizedQuery
         === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       ) {
         throw revisionInsertError;
@@ -840,6 +917,14 @@ test("post create does not fail after the main mutation when revision snapshot w
   assert.equal(response.status, 201);
   const result = await response.json();
   assert.equal(result.ok, true);
+  assert.equal(result.revisionState, "degraded");
+  assert.deepEqual(result.warnings, [
+    {
+      code: "revision_snapshot_failed",
+      message: "Revision history warning: latest snapshot could not be stored.",
+      operation: "create",
+    },
+  ]);
   assert.equal(state.posts.size, 1);
   assert.equal(state.revisions.size, 0);
 });
@@ -940,6 +1025,7 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
   state.revisions.set("revision_1", {
     id: "revision_1",
     post_id: "post_1",
+    slug: "restored-slug",
     title: "Restored title",
     summary: "Restored summary",
     body_markdown: "## Restored\n\n<script>alert(1)</script>",
@@ -1031,6 +1117,7 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
   assert.equal(restoreResponse.status, 200);
   assert.deepEqual(await restoreResponse.json(), { ok: true, restored: true });
   assert.equal(state.posts.get("post_1").title, "Restored title");
+  assert.equal(state.posts.get("post_1").slug, "restored-slug");
   assert.equal(state.posts.get("post_1").status, "published");
   assert.match(state.posts.get("post_1").sanitized_html, /<h2[^>]*>Restored<\/h2>/);
   assert.match(state.posts.get("post_1").sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
@@ -1128,6 +1215,7 @@ test("restore revision clears published_at when restoring a draft revision", asy
   state.revisions.set("revision_draft", {
     id: "revision_draft",
     post_id: "post_1",
+    slug: "draft-slug",
     title: "Draft title",
     summary: "Draft summary",
     body_markdown: "## Draft body",
@@ -1144,6 +1232,7 @@ test("restore revision clears published_at when restoring a draft revision", asy
   }));
 
   assert.equal(response.status, 200);
+  assert.equal(state.posts.get("post_1").slug, "draft-slug");
   assert.equal(state.posts.get("post_1").status, "draft");
   assert.equal(state.posts.get("post_1").published_at, null);
 });
@@ -1166,6 +1255,7 @@ test("restore revision refreshes published_at when restoring a published revisio
   state.revisions.set("revision_published", {
     id: "revision_published",
     post_id: "post_1",
+    slug: "published-slug",
     title: "Published title",
     summary: "Published summary",
     body_markdown: "## Published body",
@@ -1182,6 +1272,7 @@ test("restore revision refreshes published_at when restoring a published revisio
   }));
 
   assert.equal(response.status, 200);
+  assert.equal(state.posts.get("post_1").slug, "published-slug");
   assert.equal(state.posts.get("post_1").status, "published");
   assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(state.posts.get("post_1").updated_at, state.posts.get("post_1").published_at);
@@ -2140,6 +2231,18 @@ test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
   assert.match(
     migration,
     /CREATE UNIQUE INDEX cms_rate_limits_bucket_key_idx\s+ON cms_rate_limits\(bucket, key\);/,
+  );
+});
+
+test("cms revision slug migration backfills safely when the source post is missing", () => {
+  const migration = readFileSync(
+    new URL("../migrations/0003_cms_revision_slugs.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /COALESCE\s*\(\s*\(\s*SELECT cms_posts\.slug[\s\S]*AND cms_posts\.deleted_at IS NULL[\s\S]*\),\s*''\s*\)/,
   );
 });
 

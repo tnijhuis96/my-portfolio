@@ -1,7 +1,7 @@
 import { requireSession } from "../../../../_lib/auth.js";
 import { json } from "../../../../_lib/json.js";
 import { writeAuditEvent } from "../../../../_lib/audit.js";
-import { writePostRevision } from "../../../../_lib/content.js";
+import { captureRevisionSnapshot, withRevisionWarning } from "../../../../_lib/content.js";
 import { runOne } from "../../../../_lib/db.js";
 import { triggerDeploy } from "../../../../_lib/deploy.js";
 
@@ -94,23 +94,22 @@ export async function onRequestPost(context, runtime = globalThis) {
     deployStatus: deploy.status,
   });
 
-  try {
-    const publishedPost = await runOne(
-      context.env,
-      "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
-      context.params.id,
-    );
+  let revisionWarning = null;
+  const publishedPost = await runOne(
+    context.env,
+    "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
+    context.params.id,
+  );
 
-    if (publishedPost) {
-      await writePostRevision(context.env, publishedPost, now);
-    }
-  } catch {}
+  if (publishedPost) {
+    revisionWarning = await captureRevisionSnapshot(context.env, publishedPost, now, { operation: "publish" });
+  }
 
   return json(
-    {
+    withRevisionWarning({
       ok: true,
       publishState: "pending_deploy",
-    },
+    }, revisionWarning),
     { status: 200 },
   );
 }

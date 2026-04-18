@@ -4,6 +4,7 @@ import {
   createPost,
   isDuplicateSlugConstraint,
   isPostValidationError,
+  withRevisionWarning,
 } from "../../../_lib/content.js";
 import { runAll } from "../../../_lib/db.js";
 
@@ -35,7 +36,8 @@ export async function onRequestPost(context) {
 
   try {
     const post = await createPost(context.env, body);
-    return json({ ok: true, post }, { status: 201 });
+    const { revisionWarning, ...postRecord } = post;
+    return json(withRevisionWarning({ ok: true, post: postRecord }, revisionWarning), { status: 201 });
   } catch (error) {
     if (isPostValidationError(error)) {
       return json({ ok: false, error: error.code, fields: error.fields }, { status: error.status });

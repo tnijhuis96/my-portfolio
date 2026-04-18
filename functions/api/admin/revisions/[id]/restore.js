@@ -1,6 +1,11 @@
 import { requireSession } from "../../../../_lib/auth.js";
 import { json } from "../../../../_lib/json.js";
-import { renderPostHtml, writePostRevision } from "../../../../_lib/content.js";
+import {
+  captureRevisionSnapshot,
+  isDuplicateSlugConstraint,
+  renderPostHtml,
+  withRevisionWarning,
+} from "../../../../_lib/content.js";
 import { runOne } from "../../../../_lib/db.js";
 
 export async function onRequestPost(context) {
@@ -19,39 +24,58 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
+  const post = await runOne(
+    context.env,
+    "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
+    revision.post_id,
+  );
+  if (!post) {
+    return json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+
   const updatedAt = new Date().toISOString();
+  const restoredSlug = revision.slug || post.slug;
   const publishedAt = revision.status === "published" ? updatedAt : null;
-  const result = await context.env.CMS_DB.prepare(
-    "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-  )
-    .bind(
-      revision.title,
-      revision.summary,
-      revision.body_markdown,
-      renderPostHtml(revision.body_markdown),
-      revision.status,
-      publishedAt,
-      updatedAt,
-      revision.post_id,
+  let result;
+  try {
+    result = await context.env.CMS_DB.prepare(
+      "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
     )
-    .run();
+      .bind(
+        restoredSlug,
+        revision.title,
+        revision.summary,
+        revision.body_markdown,
+        renderPostHtml(revision.body_markdown),
+        revision.status,
+        publishedAt,
+        updatedAt,
+        revision.post_id,
+      )
+      .run();
+  } catch (error) {
+    if (isDuplicateSlugConstraint(error)) {
+      return json({ ok: false, error: "duplicate_slug" }, { status: 409 });
+    }
+
+    throw error;
+  }
 
   if ((result?.meta?.changes ?? 0) < 1) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
-  try {
-    await writePostRevision(context.env, {
-      id: revision.post_id,
-      title: revision.title,
-      summary: revision.summary,
-      body_markdown: revision.body_markdown,
-      sanitized_html: renderPostHtml(revision.body_markdown),
-      status: revision.status,
-      published_at: publishedAt,
-      updated_at: updatedAt,
-    }, updatedAt);
-  } catch {}
+  const revisionWarning = await captureRevisionSnapshot(context.env, {
+    id: revision.post_id,
+    slug: restoredSlug,
+    title: revision.title,
+    summary: revision.summary,
+    body_markdown: revision.body_markdown,
+    sanitized_html: renderPostHtml(revision.body_markdown),
+    status: revision.status,
+    published_at: publishedAt,
+    updated_at: updatedAt,
+  }, updatedAt, { operation: "restore" });
 
-  return json({ ok: true, restored: true });
+  return json(withRevisionWarning({ ok: true, restored: true }, revisionWarning));
 }

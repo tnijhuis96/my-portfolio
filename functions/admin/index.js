@@ -279,6 +279,20 @@ export async function onRequestGet() {
         return "Unable to publish this post right now.";
       }
 
+      function appendOperatorWarnings(statusMessage, result) {
+        const warnings = Array.isArray(result?.warnings)
+          ? result.warnings
+            .map((warning) => warning?.message)
+            .filter(Boolean)
+          : [];
+
+        if (!warnings.length) {
+          return statusMessage;
+        }
+
+        return [statusMessage, ...warnings].filter(Boolean).join(" ");
+      }
+
       async function loadRevisions(post) {
         if (!post?.id) {
           setRevisionsMessage(EMPTY_REVISIONS_MESSAGE);
@@ -450,7 +464,10 @@ export async function onRequestGet() {
             if (!matchesSelectionSnapshot(selectionSnapshot)) {
               return;
             }
-            editorStatus.textContent = getEditorFailureMessage(result, "Unable to save this post right now.");
+            editorStatus.textContent = appendOperatorWarnings(
+              getEditorFailureMessage(result, "Unable to save this post right now."),
+              result,
+            );
             return;
           }
 
@@ -461,12 +478,13 @@ export async function onRequestGet() {
             return;
           }
 
+          const statusMessage = appendOperatorWarnings("Draft saved.", result);
           if (postId) {
-            await loadPost(postId, { statusMessage: "Draft saved." });
+            await loadPost(postId, { statusMessage });
             return;
           }
 
-          editorStatus.textContent = "Draft saved.";
+          editorStatus.textContent = statusMessage;
         } catch {
           editorStatus.textContent = "Unable to save this post right now.";
         } finally {
@@ -559,9 +577,10 @@ export async function onRequestGet() {
             if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
               return;
             }
-            editorStatus.textContent = result?.error === "not_found"
-              ? "This revision could not be found."
-              : "Unable to restore this revision right now.";
+            editorStatus.textContent = appendOperatorWarnings(
+              getEditorFailureMessage(result, "Unable to restore this revision right now."),
+              result,
+            );
             return;
           }
 
@@ -569,7 +588,9 @@ export async function onRequestGet() {
           if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
             return;
           }
-          await loadPost(activePostId, { statusMessage: "Revision restored." });
+          await loadPost(activePostId, {
+            statusMessage: appendOperatorWarnings("Revision restored.", result),
+          });
         } catch {
           if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
             return;
@@ -604,7 +625,7 @@ export async function onRequestGet() {
             }, { csrf: true })
           });
           const result = await readJsonBody(response);
-          const statusMessage = getPublishMessage(result);
+          const statusMessage = appendOperatorWarnings(getPublishMessage(result), result);
 
           if (!response.ok && result?.error === "not_found") {
             await loadPosts();
