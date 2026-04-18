@@ -1310,6 +1310,74 @@ test("post publish route reports rollback failure and still returns deploy_faile
   });
 });
 
+test("post publish route reports rollback failure when rollback update is a no-op", async () => {
+  const { env, state } = createContentTestEnv({
+    async onRun({ normalizedQuery, bindings, state: dbState }) {
+      if (
+        normalizedQuery === "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        && bindings[0] === "draft"
+      ) {
+        dbState.posts.get(bindings[3]).deleted_at = "2025-04-03T12:00:00.000Z";
+      }
+    },
+  });
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const postPublish = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+      runtime: {
+        async fetch() {
+          throw new Error("route should use explicit runtime injection");
+        },
+      },
+    },
+    {
+      async fetch() {
+        throw new Error("network down");
+      },
+    },
+  );
+
+  assert.equal(postPublish.status, 502);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    publishState: "deploy_failed",
+    rollbackState: "failed",
+  });
+
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog[0].action, "publish");
+  assert.equal(state.auditLog[0].actor_user_id, "editor@example.com");
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
+    outcome: "deploy_failed",
+    deployStatus: 0,
+    rollbackStatus: "failed",
+    rollbackError: "rollback update affected 0 rows",
+  });
+});
+
 test("post publish route returns not_found when the publish update races with a soft-delete", async () => {
   const { env, state } = createContentTestEnv({ publishUpdateChanges: 0 });
   state.posts.set("post_1", {

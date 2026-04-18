@@ -28,6 +28,7 @@ export async function onRequestPost(context, runtime = globalThis) {
   }
 
   const now = new Date().toISOString();
+  // Re-publishing an already-published post is intentional so editors can force a redeploy after edits.
   const publishResult = await context.env.CMS_DB.prepare(
     "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
   )
@@ -45,11 +46,16 @@ export async function onRequestPost(context, runtime = globalThis) {
     let rollbackErrorMessage = null;
 
     try {
-      await context.env.CMS_DB.prepare(
+      const rollbackResult = await context.env.CMS_DB.prepare(
         "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
       )
         .bind(post.status, post.published_at, post.updated_at, context.params.id)
         .run();
+
+      if (rollbackResult.meta.changes === 0) {
+        rollbackFailed = true;
+        rollbackErrorMessage = "rollback update affected 0 rows";
+      }
     } catch (error) {
       rollbackFailed = true;
       rollbackErrorMessage = error instanceof Error ? error.message : String(error);
