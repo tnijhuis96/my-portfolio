@@ -7,7 +7,7 @@ import {
   renderPostHtml,
   sanitizePostBody,
 } from "../functions/_lib/content.js";
-import { buildDeployHeaders } from "../functions/_lib/deploy.js";
+import { buildDeployHeaders, triggerDeploy } from "../functions/_lib/deploy.js";
 import { normalizePostRecord } from "../functions/_lib/db.js";
 import {
   onRequestGet as onRequestPostGet,
@@ -25,6 +25,7 @@ function createContentTestEnv() {
   const state = {
     posts: new Map(),
     revisions: new Map(),
+    auditLog: [],
   };
 
   function findPostBySlug(slug) {
@@ -169,6 +170,42 @@ function createContentTestEnv() {
             sanitized_html: sanitizedHtml,
             status,
             updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (
+          normalizedQuery === "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ?"
+          || normalizedQuery === "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        ) {
+          const [status, publishedAt, updatedAt, id] = bindings;
+          const existing = state.posts.get(id);
+          if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
+            return { success: true, meta: { changes: 0 } };
+          }
+
+          state.posts.set(id, {
+            ...existing,
+            status,
+            published_at: publishedAt,
+            updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (
+          normalizedQuery
+          === "INSERT INTO cms_audit_log (id, actor_user_id, action, target_type, target_id, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ) {
+          const [id, actorUserId, action, targetType, targetId, metadataJson, createdAt] = bindings;
+          state.auditLog.push({
+            id,
+            actor_user_id: actorUserId,
+            action,
+            target_type: targetType,
+            target_id: targetId,
+            metadata_json: metadataJson,
+            created_at: createdAt,
           });
           return { success: true, meta: { changes: 1 } };
         }
@@ -830,15 +867,144 @@ test("post update returns conflict for duplicate slugs", async () => {
   assert.equal(state.posts.get("post_1").slug, "hello-world");
 });
 
-test("post publish route remains a placeholder", async () => {
-  const postPublish = await onRequestPostPublish();
-  assert.equal(postPublish.status, 501);
-  assert.deepEqual(await postPublish.json(), {
-    ok: false,
-    error: "not_implemented",
-    message: "Post publish is not implemented yet.",
-    publishState: "pending_deploy",
+test("triggerDeploy posts the cms publish payload and returns success details", async () => {
+  const requests = [];
+  const response = await triggerDeploy(
+    {
+      PAGES_DEPLOY_HOOK_URL: "https://example.com/deploy",
+      PAGES_DEPLOY_HOOK_SECRET: "  deploy-secret  ",
+    },
+    {
+      async fetch(url, init) {
+        requests.push({ url, init });
+        return { ok: true, status: 202 };
+      },
+    },
+  );
+
+  assert.deepEqual(response, { ok: true, status: 202 });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://example.com/deploy");
+  assert.equal(requests[0].init.method, "POST");
+  assert.equal(requests[0].init.headers["content-type"], "application/json");
+  assert.equal(requests[0].init.headers["x-deploy-secret"], "deploy-secret");
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    event: "cms-publish",
+    timestamp: JSON.parse(requests[0].init.body).timestamp,
   });
+  assert.match(JSON.parse(requests[0].init.body).timestamp, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test("triggerDeploy returns failed status details when the deploy hook fails", async () => {
+  const response = await triggerDeploy(
+    {
+      PAGES_DEPLOY_HOOK_URL: "https://example.com/deploy",
+    },
+    {
+      async fetch() {
+        return { ok: false, status: 500 };
+      },
+    },
+  );
+
+  assert.deepEqual(response, { ok: false, status: 500 });
+});
+
+test("post publish route publishes the post, records audit, and triggers deploy", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+  env.PAGES_DEPLOY_HOOK_SECRET = "hook-secret";
+
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    return { ok: true, status: 201 };
+  };
+
+  try {
+    const postPublish = await onRequestPostPublish({
+      env,
+      params: { id: "post_1" },
+    });
+
+    assert.equal(postPublish.status, 200);
+    assert.deepEqual(await postPublish.json(), {
+      ok: true,
+      publishState: "pending_deploy",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.posts.get("post_1").updated_at, state.posts.get("post_1").published_at);
+  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog[0].action, "publish");
+  assert.equal(state.auditLog[0].target_type, "post");
+  assert.equal(state.auditLog[0].target_id, "post_1");
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), { stage: "attempted" });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://example.com/deploy");
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    event: "cms-publish",
+    timestamp: JSON.parse(requests[0].init.body).timestamp,
+  });
+});
+
+test("post publish route returns deploy_failed when the deploy hook call fails", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 503 });
+
+  try {
+    const postPublish = await onRequestPostPublish({
+      env,
+      params: { id: "post_1" },
+    });
+
+    assert.equal(postPublish.status, 502);
+    assert.deepEqual(await postPublish.json(), {
+      ok: false,
+      publishState: "deploy_failed",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog[0].action, "publish");
 });
 
 test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
@@ -882,4 +1048,9 @@ test("buildDeployHeaders tolerates missing env and falls back to legacy secret",
   });
   assert.equal(headersWithLegacySecret["content-type"], "application/json");
   assert.equal(headersWithLegacySecret["x-deploy-secret"], "legacy-secret");
+
+  const headersWithTrimmedSecret = buildDeployHeaders({
+    PAGES_DEPLOY_HOOK_SECRET: "  secret  ",
+  });
+  assert.equal(headersWithTrimmedSecret["x-deploy-secret"], "secret");
 });
