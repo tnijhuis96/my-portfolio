@@ -38,7 +38,7 @@
 ### Content mutations
 - Save/create uses the existing posts routes and refreshes the editor with `Draft saved.` on success.
 - Delete uses the existing post delete route and refreshes the list with `Post deleted.` on success.
-- Restore rewrites the live post title, summary, markdown body, sanitized HTML, status, and `published_at` from the stored revision, then reloads the editor with `Revision restored.`
+- Restore reapplies the stored revision title, summary, markdown body, and status, regenerates sanitized HTML from the restored markdown, and resets `published_at` based on the restored status before reloading the editor with `Revision restored.`
 
 ### Publish outcomes
 - Successful publish returns `200` with `publishState: "pending_deploy"` and the UI shows `Publish accepted. Deploy triggered.`
