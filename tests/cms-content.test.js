@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { normalizePostRecord } from "../functions/_lib/db.js";
 
 test("normalizePostRecord maps D1 rows into CMS post objects", () => {
@@ -28,4 +29,20 @@ test("normalizePostRecord maps D1 rows into CMS post objects", () => {
     deleted_at: null,
     updated_at: "2025-04-02T12:00:00.000Z",
   });
+});
+
+test("normalizePostRecord returns null for missing rows", () => {
+  assert.equal(normalizePostRecord(null), null);
+});
+
+test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
+  const migration = readFileSync(
+    new URL("../migrations/0002_cms_rate_limits.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX cms_rate_limits_bucket_key_idx\s+ON cms_rate_limits\(bucket, key\);/,
+  );
 });
