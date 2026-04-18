@@ -72,15 +72,27 @@ export async function onRequestGet() {
       };
 
       const state = {
-        session: null
+        session: null,
+        activePostId: null,
+        posts: []
       };
 
+      const EMPTY_REVISIONS_MESSAGE = "Select or create a post to view history.";
       const loginShell = document.getElementById("login-shell");
       const workspaceShell = document.getElementById("workspace-shell");
       const loginForm = document.getElementById("login-form");
       const loginStatus = document.getElementById("login-status");
       const editorStatus = document.getElementById("editor-status");
       const passwordInput = document.getElementById("password");
+      const newPostButton = document.getElementById("new-post");
+      const postList = document.getElementById("post-list");
+      const slugInput = document.getElementById("slug");
+      const titleInput = document.getElementById("title");
+      const summaryInput = document.getElementById("summary");
+      const bodyMarkdownInput = document.getElementById("bodyMarkdown");
+      const savePostButton = document.getElementById("save-post");
+      const deletePostButton = document.getElementById("delete-post");
+      const revisionsList = document.getElementById("revisions-list");
 
       function showLogin(message = "") {
         state.session = null;
@@ -123,6 +135,57 @@ export async function onRequestGet() {
         return "Unable to sign in right now.";
       }
 
+      function getEditorPayload() {
+        return {
+          slug: slugInput.value.trim(),
+          title: titleInput.value.trim(),
+          summary: summaryInput.value.trim(),
+          bodyMarkdown: bodyMarkdownInput.value.trim(),
+          status: "draft"
+        };
+      }
+
+      function resetEditor() {
+        state.activePostId = null;
+        slugInput.value = "";
+        titleInput.value = "";
+        summaryInput.value = "";
+        bodyMarkdownInput.value = "";
+        editorStatus.textContent = "";
+        revisionsList.textContent = EMPTY_REVISIONS_MESSAGE;
+      }
+
+      function getEditorFailureMessage(result, fallbackMessage) {
+        if (result?.error === "required_field") {
+          const fields = Array.isArray(result.fields) && result.fields.length
+            ? result.fields.join(", ")
+            : "all required fields";
+          return "Complete the required fields: " + fields + ".";
+        }
+
+        if (result?.error === "duplicate_slug") {
+          return "This slug is already in use. Choose a different slug.";
+        }
+
+        if (result?.error === "not_found") {
+          return "This post could not be found.";
+        }
+
+        return fallbackMessage;
+      }
+
+      function renderPostList() {
+        const buttons = state.posts.map((post) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = post.title || post.slug || "Untitled draft";
+          button.addEventListener("click", () => loadPost(post.id));
+          return button;
+        });
+
+        postList.replaceChildren(...buttons);
+      }
+
       async function readJsonBody(response) {
         const contentType = response.headers?.get("content-type") || "";
         if (!contentType.toLowerCase().includes("application/json")) {
@@ -133,6 +196,152 @@ export async function onRequestGet() {
           return await response.json();
         } catch {
           return null;
+        }
+      }
+
+      async function loadPosts() {
+        try {
+          const response = await fetch(window.CMS_ENDPOINTS.posts, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+              accept: "application/json"
+            }
+          });
+          const result = await readJsonBody(response);
+
+          if (!response.ok) {
+            editorStatus.textContent = "Unable to load posts right now.";
+            return [];
+          }
+
+          state.posts = Array.isArray(result?.posts) ? result.posts : [];
+          renderPostList();
+          return state.posts;
+        } catch {
+          editorStatus.textContent = "Unable to load posts right now.";
+          return [];
+        }
+      }
+
+      async function loadPost(id, options = {}) {
+        editorStatus.textContent = "Loading post...";
+
+        try {
+          const response = await fetch(window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(id), {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+              accept: "application/json"
+            }
+          });
+          const result = await readJsonBody(response);
+
+          if (!response.ok || !result?.post) {
+            if (result?.error === "not_found") {
+              await loadPosts();
+              resetEditor();
+              editorStatus.textContent = "This post could not be found.";
+              return null;
+            }
+
+            editorStatus.textContent = "Unable to load this post right now.";
+            return null;
+          }
+
+          state.activePostId = result.post.id;
+          slugInput.value = result.post.slug || "";
+          titleInput.value = result.post.title || "";
+          summaryInput.value = result.post.summary || "";
+          bodyMarkdownInput.value = result.post.bodyMarkdown || "";
+          revisionsList.textContent = EMPTY_REVISIONS_MESSAGE;
+          editorStatus.textContent = options.statusMessage || "";
+          return result.post;
+        } catch {
+          editorStatus.textContent = "Unable to load this post right now.";
+          return null;
+        }
+      }
+
+      async function savePost() {
+        const payload = getEditorPayload();
+        const isUpdate = Boolean(state.activePostId);
+        const method = isUpdate ? "PUT" : "POST";
+        const url = isUpdate
+          ? window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(state.activePostId)
+          : window.CMS_ENDPOINTS.posts;
+
+        editorStatus.textContent = "Saving draft...";
+
+        try {
+          const response = await fetch(url, {
+            method,
+            credentials: "same-origin",
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json"
+            },
+            body: JSON.stringify(payload)
+          });
+          const result = await readJsonBody(response);
+
+          if (!response.ok) {
+            if (result?.error === "not_found") {
+              await loadPosts();
+              resetEditor();
+            }
+
+            editorStatus.textContent = getEditorFailureMessage(result, "Unable to save this post right now.");
+            return;
+          }
+
+          const postId = isUpdate ? state.activePostId : result?.post?.id;
+          await loadPosts();
+
+          if (postId) {
+            await loadPost(postId, { statusMessage: "Draft saved." });
+            return;
+          }
+
+          editorStatus.textContent = "Draft saved.";
+        } catch {
+          editorStatus.textContent = "Unable to save this post right now.";
+        }
+      }
+
+      async function deletePost() {
+        if (!state.activePostId) {
+          editorStatus.textContent = "Select a post before deleting it.";
+          return;
+        }
+
+        editorStatus.textContent = "Deleting post...";
+
+        try {
+          const response = await fetch(window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(state.activePostId), {
+            method: "DELETE",
+            credentials: "same-origin",
+            headers: {
+              accept: "application/json"
+            }
+          });
+          const result = await readJsonBody(response);
+
+          if (!response.ok) {
+            if (result?.error === "not_found") {
+              await loadPosts();
+              resetEditor();
+            }
+
+            editorStatus.textContent = getEditorFailureMessage(result, "Unable to delete this post right now.");
+            return;
+          }
+
+          resetEditor();
+          await loadPosts();
+          editorStatus.textContent = "Post deleted.";
+        } catch {
+          editorStatus.textContent = "Unable to delete this post right now.";
         }
       }
 
@@ -150,6 +359,7 @@ export async function onRequestGet() {
 
           if (session.authenticated) {
             showWorkspace(message || "Signed in.");
+            await loadPosts();
             return;
           }
 
@@ -195,6 +405,9 @@ export async function onRequestGet() {
       }
 
       loginForm.addEventListener("submit", handleLogin);
+      newPostButton.addEventListener("click", resetEditor);
+      savePostButton.addEventListener("click", savePost);
+      deletePostButton.addEventListener("click", deletePost);
       bootstrapSession();
     </script>
   </body>
