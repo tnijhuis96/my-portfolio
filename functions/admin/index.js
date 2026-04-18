@@ -76,7 +76,7 @@ export async function onRequestGet() {
         activePostId: null,
         posts: [],
         selectionVersion: 0,
-        publishPending: false
+        mutationPending: false
       };
 
       const EMPTY_REVISIONS_MESSAGE = "Select or create a post to view history.";
@@ -188,6 +188,26 @@ export async function onRequestGet() {
         revisionsList.textContent = message;
       }
 
+      function updateMutationControls() {
+        const disabled = state.mutationPending;
+        savePostButton.disabled = disabled;
+        deletePostButton.disabled = disabled;
+        publishButton.disabled = disabled;
+
+        const revisionItems = Array.from(revisionsList.children || []);
+        revisionItems.forEach((item) => {
+          const actionButton = item?.children?.[1];
+          if (actionButton) {
+            actionButton.disabled = disabled;
+          }
+        });
+      }
+
+      function setMutationPending(pending) {
+        state.mutationPending = pending;
+        updateMutationControls();
+      }
+
       function beginSelectionChange() {
         state.selectionVersion += 1;
         return state.selectionVersion;
@@ -240,6 +260,7 @@ export async function onRequestGet() {
           label.textContent = getRevisionLabel(revision);
           button.type = "button";
           button.textContent = "Restore revision";
+          button.disabled = state.mutationPending;
           button.addEventListener("click", () => restoreRevision(revision.id));
 
           item.appendChild(label);
@@ -350,6 +371,10 @@ export async function onRequestGet() {
       }
 
       async function savePost() {
+        if (state.mutationPending) {
+          return;
+        }
+
         const payload = getEditorPayload();
         const isUpdate = Boolean(state.activePostId);
         const method = isUpdate ? "PUT" : "POST";
@@ -357,6 +382,7 @@ export async function onRequestGet() {
           ? window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(state.activePostId)
           : window.CMS_ENDPOINTS.posts;
 
+        setMutationPending(true);
         editorStatus.textContent = "Saving draft...";
 
         try {
@@ -392,15 +418,22 @@ export async function onRequestGet() {
           editorStatus.textContent = "Draft saved.";
         } catch {
           editorStatus.textContent = "Unable to save this post right now.";
+        } finally {
+          setMutationPending(false);
         }
       }
 
       async function deletePost() {
+        if (state.mutationPending) {
+          return;
+        }
+
         if (!state.activePostId) {
           editorStatus.textContent = "Select a post before deleting it.";
           return;
         }
 
+        setMutationPending(true);
         editorStatus.textContent = "Deleting post...";
 
         try {
@@ -428,10 +461,16 @@ export async function onRequestGet() {
           editorStatus.textContent = "Post deleted.";
         } catch {
           editorStatus.textContent = "Unable to delete this post right now.";
+        } finally {
+          setMutationPending(false);
         }
       }
 
       async function restoreRevision(revisionId) {
+        if (state.mutationPending) {
+          return;
+        }
+
         if (!state.activePostId) {
           editorStatus.textContent = "Select a post before restoring a revision.";
           return;
@@ -439,6 +478,7 @@ export async function onRequestGet() {
 
         const activePostId = state.activePostId;
         const selectionVersion = state.selectionVersion;
+        setMutationPending(true);
         editorStatus.textContent = "Restoring revision...";
 
         try {
@@ -471,23 +511,24 @@ export async function onRequestGet() {
             return;
           }
           editorStatus.textContent = "Unable to restore this revision right now.";
+        } finally {
+          setMutationPending(false);
         }
       }
 
       async function publishPost() {
+        if (state.mutationPending) {
+          return;
+        }
+
         if (!state.activePostId) {
           editorStatus.textContent = "Save the post before publishing.";
           return;
         }
 
-        if (state.publishPending) {
-          return;
-        }
-
         const activePostId = state.activePostId;
         const selectionVersion = state.selectionVersion;
-        state.publishPending = true;
-        publishButton.disabled = true;
+        setMutationPending(true);
         editorStatus.textContent = "Publishing post...";
 
         try {
@@ -521,8 +562,7 @@ export async function onRequestGet() {
           }
           editorStatus.textContent = "Unable to publish this post right now.";
         } finally {
-          state.publishPending = false;
-          publishButton.disabled = false;
+          setMutationPending(false);
         }
       }
 

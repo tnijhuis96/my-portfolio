@@ -13,8 +13,10 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
+  const updatedAt = new Date().toISOString();
+  const publishedAt = revision.status === "published" ? updatedAt : null;
   const result = await context.env.CMS_DB.prepare(
-    "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+    "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
   )
     .bind(
       revision.title,
@@ -22,7 +24,8 @@ export async function onRequestPost(context) {
       revision.body_markdown,
       renderPostHtml(revision.body_markdown),
       revision.status,
-      new Date().toISOString(),
+      publishedAt,
+      updatedAt,
       revision.post_id,
     )
     .run();

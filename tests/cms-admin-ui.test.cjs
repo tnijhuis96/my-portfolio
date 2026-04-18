@@ -6,27 +6,41 @@ function extractInlineScript(html) {
   return html.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
 }
 
+function toCollection(children) {
+  const collection = { length: children.length };
+  children.forEach((child, index) => {
+    collection[index] = child;
+  });
+  return collection;
+}
+
 function createFakeElement(initial = {}) {
+  let childNodes = initial.children ? [...initial.children] : [];
   return {
     tagName: initial.tagName ?? "div",
     hidden: Boolean(initial.hidden),
     textContent: initial.textContent ?? "",
     value: initial.value ?? "",
     disabled: Boolean(initial.disabled),
-    children: initial.children ? [...initial.children] : [],
+    get children() {
+      return toCollection(childNodes);
+    },
     listeners: {},
     addEventListener(type, handler) {
       this.listeners[type] = handler;
     },
     appendChild(child) {
-      this.children.push(child);
+      childNodes.push(child);
       return child;
     },
     replaceChildren(...children) {
-      this.children = children;
+      childNodes = children;
       return children[children.length - 1] ?? null;
     },
     click() {
+      if (this.disabled) {
+        return undefined;
+      }
       return this.listeners.click?.({
         currentTarget: this,
         preventDefault() {},
@@ -979,4 +993,166 @@ test("admin inline script prevents duplicate publish requests and resets on publ
   assert.equal(elements["post-list"].children.length, 0);
   assert.equal(elements.title.value, "");
   assert.match(elements["editor-status"].textContent, /could not be found/i);
+});
+
+test("admin inline script serializes mutating actions while publish is pending", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  const fetchCalls = [];
+  let detailResponse = {
+    id: "post-1",
+    slug: "hello-world",
+    title: "Hello World",
+    summary: "First summary",
+    body_markdown: "# Hello",
+    status: "draft",
+    revisions: [
+      {
+        id: "revision-1",
+        status: "draft",
+        created_at: "2025-01-01T00:00:00.000Z",
+        title: "First revision",
+        summary: "First summary",
+      },
+    ],
+  };
+  let listResponse = [
+    {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      status: "draft",
+      updated_at: "2025-01-01T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+  ];
+  const publishDeferred = createDeferred();
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      fetchCalls.push({ url, options });
+
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ posts: listResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: detailResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1/publish" && options.method === "POST") {
+        return publishDeferred.promise;
+      }
+
+      if (url === "/api/admin/posts/post-1" && options.method === "PUT") {
+        throw new Error("save should not run while publish is pending");
+      }
+
+      if (url === "/api/admin/posts/post-1" && options.method === "DELETE") {
+        throw new Error("delete should not run while publish is pending");
+      }
+
+      if (url === "/api/admin/revisions/revision-1/restore" && options.method === "POST") {
+        throw new Error("restore should not run while publish is pending");
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  const restoreButton = elements["revisions-list"].children[0].children[1];
+  const publishPromise = elements["publish-post"].click();
+  await flushMicrotasks(4);
+
+  assert.equal(elements["save-post"].disabled, true);
+  assert.equal(elements["delete-post"].disabled, true);
+  assert.equal(elements["publish-post"].disabled, true);
+  assert.equal(restoreButton.disabled, true);
+
+  await elements["save-post"].click();
+  await elements["delete-post"].click();
+  await restoreButton.click();
+  await flushMicrotasks(4);
+
+  assert.deepEqual(
+    fetchCalls
+      .filter(({ options }) => ["PUT", "DELETE", "POST"].includes(options.method ?? "GET"))
+      .map(({ url, options }) => [url, options.method]),
+    [["/api/admin/posts/post-1/publish", "POST"]],
+  );
+
+  detailResponse = {
+    ...detailResponse,
+    status: "published",
+    revisions: [
+      {
+        id: "revision-2",
+        status: "published",
+        created_at: "2025-01-02T00:00:00.000Z",
+        title: "Published snapshot",
+        summary: "Published summary",
+      },
+    ],
+  };
+  listResponse = [{ ...listResponse[0], status: "published" }];
+  publishDeferred.resolve(createJsonResponse({ ok: true, publishState: "pending_deploy" }));
+  await publishPromise;
+  await flushMicrotasks(10);
+
+  assert.equal(elements["save-post"].disabled, false);
+  assert.equal(elements["delete-post"].disabled, false);
+  assert.equal(elements["publish-post"].disabled, false);
+  assert.equal(elements["revisions-list"].children[0].children[1].disabled, false);
 });

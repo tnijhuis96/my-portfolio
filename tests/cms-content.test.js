@@ -195,6 +195,29 @@ function createContentTestEnv(options = {}) {
         }
 
         if (
+          normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ?"
+          || normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        ) {
+          const [title, summary, bodyMarkdown, sanitizedHtml, status, publishedAt, updatedAt, id] = bindings;
+          const existing = state.posts.get(id);
+          if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
+            return { success: true, meta: { changes: 0 } };
+          }
+
+          state.posts.set(id, {
+            ...existing,
+            title,
+            summary,
+            body_markdown: bodyMarkdown,
+            sanitized_html: sanitizedHtml,
+            status,
+            published_at: publishedAt,
+            updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (
           normalizedQuery === "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ?"
           || normalizedQuery === "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
         ) {
@@ -654,6 +677,77 @@ test("restore revision returns not_found for soft-deleted target posts", async (
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
   assert.equal(state.posts.get("post_deleted").title, "Deleted");
+});
+
+test("restore revision clears published_at when restoring a draft revision", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Published title",
+    summary: "Published summary",
+    body_markdown: "# Published",
+    sanitized_html: "<h1>Published</h1>",
+    status: "published",
+    published_at: "2025-04-03T12:00:00.000Z",
+    deleted_at: null,
+    updated_at: "2025-04-03T12:00:00.000Z",
+  });
+  state.revisions.set("revision_draft", {
+    id: "revision_draft",
+    post_id: "post_1",
+    title: "Draft title",
+    summary: "Draft summary",
+    body_markdown: "## Draft body",
+    sanitized_html: "<h2>unsafe</h2>",
+    status: "draft",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const response = await onRequestRestoreRevision({
+    env,
+    params: { id: "revision_draft" },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(state.posts.get("post_1").status, "draft");
+  assert.equal(state.posts.get("post_1").published_at, null);
+});
+
+test("restore revision refreshes published_at when restoring a published revision", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Draft title",
+    summary: "Draft summary",
+    body_markdown: "# Draft",
+    sanitized_html: "<h1>Draft</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-03T12:00:00.000Z",
+  });
+  state.revisions.set("revision_published", {
+    id: "revision_published",
+    post_id: "post_1",
+    title: "Published title",
+    summary: "Published summary",
+    body_markdown: "## Published body",
+    sanitized_html: "<h2>unsafe</h2>",
+    status: "published",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const response = await onRequestRestoreRevision({
+    env,
+    params: { id: "revision_published" },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.posts.get("post_1").updated_at, state.posts.get("post_1").published_at);
 });
 
 test("post update and delete return not_found for missing or soft-deleted posts", async () => {
