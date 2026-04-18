@@ -3,7 +3,7 @@ import { writeAuditEvent } from "../../../../_lib/audit.js";
 import { runOne } from "../../../../_lib/db.js";
 import { triggerDeploy } from "../../../../_lib/deploy.js";
 
-export async function onRequestPost(context) {
+export async function onRequestPost(context, runtime = globalThis) {
   const post = await runOne(
     context.env,
     "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
@@ -24,7 +24,7 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
-  const deploy = await triggerDeploy(context.env, context.runtime);
+  const deploy = await triggerDeploy(context.env, runtime);
 
   if (!deploy.ok) {
     await context.env.CMS_DB.prepare(

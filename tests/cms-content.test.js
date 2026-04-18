@@ -933,27 +933,31 @@ test("post publish route publishes the post, records audit, and triggers deploy"
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
   env.PAGES_DEPLOY_HOOK_SECRET = "hook-secret";
 
-  const originalFetch = globalThis.fetch;
   const requests = [];
-  globalThis.fetch = async (url, init) => {
-    requests.push({ url, init });
-    return { ok: true, status: 201 };
+  const runtime = {
+    async fetch(url, init) {
+      requests.push({ url, init });
+      return { ok: true, status: 201 };
+    },
   };
-
-  try {
-    const postPublish = await onRequestPostPublish({
+  const postPublish = await onRequestPostPublish(
+    {
       env,
       params: { id: "post_1" },
-    });
+      runtime: {
+        async fetch() {
+          throw new Error("route should use explicit runtime injection");
+        },
+      },
+    },
+    runtime,
+  );
 
-    assert.equal(postPublish.status, 200);
-    assert.deepEqual(await postPublish.json(), {
-      ok: true,
-      publishState: "pending_deploy",
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(postPublish.status, 200);
+  assert.deepEqual(await postPublish.json(), {
+    ok: true,
+    publishState: "pending_deploy",
+  });
 
   assert.equal(state.posts.get("post_1").status, "published");
   assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
@@ -991,23 +995,28 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
 
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: false, status: 503 });
-
-  try {
-    const postPublish = await onRequestPostPublish({
+  const postPublish = await onRequestPostPublish(
+    {
       env,
       params: { id: "post_1" },
-    });
+      runtime: {
+        async fetch() {
+          throw new Error("route should use explicit runtime injection");
+        },
+      },
+    },
+    {
+      async fetch() {
+        return { ok: false, status: 503 };
+      },
+    },
+  );
 
-    assert.equal(postPublish.status, 502);
-    assert.deepEqual(await postPublish.json(), {
-      ok: false,
-      publishState: "deploy_failed",
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(postPublish.status, 502);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    publishState: "deploy_failed",
+  });
 
   assert.equal(state.posts.get("post_1").status, "published");
   assert.equal(state.posts.get("post_1").published_at, "2025-04-01T12:00:00.000Z");
@@ -1037,33 +1046,83 @@ test("post publish route returns not_found for missing or soft-deleted posts wit
 
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
-  const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
-  globalThis.fetch = async () => {
-    fetchCalls += 1;
-    return { ok: true, status: 201 };
+  const runtime = {
+    async fetch() {
+      fetchCalls += 1;
+      return { ok: true, status: 201 };
+    },
   };
 
-  try {
-    const missingResponse = await onRequestPostPublish({
+  const missingResponse = await onRequestPostPublish(
+    {
       env,
       params: { id: "post_missing" },
-    });
-    assert.equal(missingResponse.status, 404);
-    assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
+    },
+    runtime,
+  );
+  assert.equal(missingResponse.status, 404);
+  assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
 
-    const deletedResponse = await onRequestPostPublish({
+  const deletedResponse = await onRequestPostPublish(
+    {
       env,
       params: { id: "post_deleted" },
-    });
-    assert.equal(deletedResponse.status, 404);
-    assert.deepEqual(await deletedResponse.json(), { ok: false, error: "not_found" });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+    },
+    runtime,
+  );
+  assert.equal(deletedResponse.status, 404);
+  assert.deepEqual(await deletedResponse.json(), { ok: false, error: "not_found" });
 
   assert.equal(fetchCalls, 0);
   assert.equal(state.auditLog.length, 0);
+});
+
+test("post publish route returns deploy_failed when the deploy hook URL is missing", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "published",
+    published_at: "2025-04-01T12:00:00.000Z",
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = " ";
+
+  let fetchCalls = 0;
+  const postPublish = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+    },
+    {
+      async fetch() {
+        fetchCalls += 1;
+        return { ok: true, status: 201 };
+      },
+    },
+  );
+
+  assert.equal(postPublish.status, 502);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    publishState: "deploy_failed",
+  });
+  assert.equal(fetchCalls, 0);
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.equal(state.posts.get("post_1").published_at, "2025-04-01T12:00:00.000Z");
+  assert.equal(state.posts.get("post_1").updated_at, "2025-04-02T12:00:00.000Z");
+  assert.equal(state.auditLog.length, 1);
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
+    outcome: "deploy_failed",
+    deployStatus: 0,
+  });
 });
 
 test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
