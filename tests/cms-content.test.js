@@ -64,6 +64,22 @@ function createContentTestEnv(options = {}) {
         throw new Error(`Unsupported first() query: ${normalizedQuery}`);
       },
       async all() {
+        if (normalizedQuery === "SELECT id, status, created_at, title, summary FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC") {
+          const [postId] = bindings;
+          return {
+            results: [...state.revisions.values()]
+              .filter((revision) => revision.post_id === postId)
+              .sort((left, right) => right.created_at.localeCompare(left.created_at))
+              .map((revision) => ({
+                id: revision.id,
+                status: revision.status,
+                created_at: revision.created_at,
+                title: revision.title,
+                summary: revision.summary,
+              })),
+          };
+        }
+
         if (normalizedQuery === "SELECT id, slug, title, summary, status, published_at, deleted_at, updated_at FROM cms_posts WHERE deleted_at IS NULL ORDER BY updated_at DESC") {
           return {
             results: [...state.posts.values()]
@@ -490,13 +506,43 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
     status: "published",
     created_at: "2025-04-01T12:00:00.000Z",
   });
+  state.revisions.set("revision_2", {
+    id: "revision_2",
+    post_id: "post_1",
+    title: "Older title",
+    summary: "Older summary",
+    body_markdown: "## Older",
+    sanitized_html: "<h2>Older</h2>",
+    status: "draft",
+    created_at: "2025-03-01T12:00:00.000Z",
+  });
 
   const readResponse = await onRequestPostGet({
     env,
     params: { id: "post_1" },
   });
   assert.equal(readResponse.status, 200);
-  assert.equal((await readResponse.json()).post.id, "post_1");
+  assert.deepEqual(await readResponse.json(), {
+    post: {
+      ...state.posts.get("post_1"),
+      revisions: [
+        {
+          id: "revision_1",
+          status: "published",
+          created_at: "2025-04-01T12:00:00.000Z",
+          title: "Restored title",
+          summary: "Restored summary",
+        },
+        {
+          id: "revision_2",
+          status: "draft",
+          created_at: "2025-03-01T12:00:00.000Z",
+          title: "Older title",
+          summary: "Older summary",
+        },
+      ],
+    },
+  });
 
   const updateResponse = await onRequestPostPut({
     env,

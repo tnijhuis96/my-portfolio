@@ -85,6 +85,16 @@ async function flushMicrotasks(count = 6) {
   });
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 test("admin shell includes login/workspace shells and session bootstrap wiring", async () => {
   const { onRequestGet } = await import("../functions/admin/index.js");
   const response = await onRequestGet();
@@ -112,13 +122,20 @@ test("admin shell includes login/workspace shells and session bootstrap wiring",
   assert.match(html, /id="post-list"/);
   assert.match(html, /id="save-post"/);
   assert.match(html, /id="delete-post"/);
+  assert.match(html, /id="publish-post"/);
+  assert.match(html, /id="revisions-list"/);
   assert.match(html, /async function bootstrapSession\(/);
   assert.match(html, /async function loadPosts\(/);
+  assert.match(html, /async function loadRevisions\(/);
   assert.match(html, /async function savePost\(/);
   assert.match(html, /async function deletePost\(/);
+  assert.match(html, /async function restoreRevision\(/);
+  assert.match(html, /async function publishPost\(/);
   assert.match(html, /fetch\(window\.CMS_ENDPOINTS\.session/);
   assert.match(html, /fetch\(window\.CMS_ENDPOINTS\.login/);
   assert.match(html, /fetch\(window\.CMS_ENDPOINTS\.posts/);
+  assert.match(html, /\/publish/);
+  assert.match(html, /\/restore/);
   assert.match(
     html,
     /<\/main>\s*<script>\s*window\.CMS_ENDPOINTS\s*=/,
@@ -144,6 +161,7 @@ test("admin inline script keeps login shell active and shows retry-after lockout
     "post-list": createFakeElement(),
     "save-post": createFakeElement({ tagName: "button" }),
     "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
     slug: createFakeElement(),
     title: createFakeElement(),
     summary: createFakeElement(),
@@ -230,6 +248,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
     "new-post": createFakeElement({ tagName: "button" }),
     "save-post": createFakeElement({ tagName: "button" }),
     "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
     slug: createFakeElement({ value: "" }),
     title: createFakeElement({ value: "" }),
     summary: createFakeElement({ value: "" }),
@@ -364,4 +383,600 @@ test("admin inline script wires post list, save, delete, and reset actions for t
   assert.equal(elements["post-list"].children.length, 0);
   assert.equal(elements.slug.value, "");
   assert.match(elements["editor-status"].textContent, /deleted/i);
+});
+
+test("admin inline script renders revision states and refreshes after restoring a revision", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  const fetchCalls = [];
+  let listResponse = [
+    {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      status: "draft",
+      updated_at: "2025-01-01T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+  ];
+  let detailResponse = {
+    id: "post-1",
+    slug: "hello-world",
+    title: "Hello World",
+    summary: "First summary",
+    body_markdown: "# Hello",
+    status: "draft",
+    revisions: [],
+  };
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      fetchCalls.push({ url, options });
+
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ posts: listResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: detailResponse });
+      }
+
+      if (url === "/api/admin/revisions/revision-2/restore" && options.method === "POST") {
+        detailResponse = {
+          ...detailResponse,
+          title: "Restored title",
+          summary: "Restored summary",
+          body_markdown: "## Restored",
+          status: "published",
+          revisions: [
+            {
+              id: "revision-3",
+              status: "published",
+              created_at: "2025-01-03T00:00:00.000Z",
+              title: "Post-restore snapshot",
+              summary: "Newest revision",
+            },
+          ],
+        };
+        listResponse = [{ ...listResponse[0], title: "Restored title", status: "published" }];
+        return createJsonResponse({ ok: true, restored: true });
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  assert.equal(elements["revisions-list"].textContent, "Select or create a post to view history.");
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  assert.equal(elements["revisions-list"].textContent, "No revisions yet.");
+
+  detailResponse = {
+    ...detailResponse,
+    revisions: [
+      {
+        id: "revision-2",
+        status: "draft",
+        created_at: "2025-01-02T00:00:00.000Z",
+        title: "Second revision",
+        summary: "Second summary",
+      },
+      {
+        id: "revision-1",
+        status: "published",
+        created_at: "2025-01-01T00:00:00.000Z",
+        title: "First revision",
+        summary: "First summary",
+      },
+    ],
+  };
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  assert.equal(elements["revisions-list"].children.length, 2);
+  assert.match(elements["revisions-list"].children[0].children[0].textContent, /Second revision/);
+  assert.match(elements["revisions-list"].children[0].children[1].textContent, /restore/i);
+
+  await elements["revisions-list"].children[0].children[1].click();
+  await flushMicrotasks(10);
+
+  assert.ok(
+    fetchCalls.some(({ url, options }) => url === "/api/admin/revisions/revision-2/restore" && options.method === "POST"),
+    "restore should post to the revision restore endpoint",
+  );
+  assert.equal(elements.title.value, "Restored title");
+  assert.equal(elements["post-list"].children[0].textContent, "Restored title");
+  assert.match(elements["editor-status"].textContent, /revision restored/i);
+  assert.equal(elements["revisions-list"].children.length, 1);
+  assert.match(elements["revisions-list"].children[0].children[0].textContent, /Post-restore snapshot/);
+});
+
+test("admin inline script shows inline failures for restore and publish outcomes", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  const fetchCalls = [];
+  let listResponse = [
+    {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      status: "draft",
+      updated_at: "2025-01-01T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+  ];
+  let detailResponse = {
+    id: "post-1",
+    slug: "hello-world",
+    title: "Hello World",
+    summary: "First summary",
+    body_markdown: "# Hello",
+    status: "draft",
+    revisions: [
+      {
+        id: "revision-1",
+        status: "draft",
+        created_at: "2025-01-01T00:00:00.000Z",
+        title: "First revision",
+        summary: "First summary",
+      },
+    ],
+  };
+  const publishResponses = [
+    {
+      ok: true,
+      status: 200,
+      body: { ok: true, publishState: "pending_deploy" },
+      nextPost: { ...detailResponse, status: "published" },
+      nextList: [{ ...listResponse[0], status: "published" }],
+    },
+    {
+      ok: false,
+      status: 502,
+      body: { ok: false, publishState: "deploy_failed" },
+      nextPost: { ...detailResponse, status: "draft" },
+      nextList: [{ ...listResponse[0], status: "draft" }],
+    },
+    {
+      ok: false,
+      status: 502,
+      body: { ok: false, publishState: "deploy_failed", rollbackState: "failed" },
+      nextPost: { ...detailResponse, status: "published" },
+      nextList: [{ ...listResponse[0], status: "published" }],
+    },
+  ];
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      fetchCalls.push({ url, options });
+
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ posts: listResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: detailResponse });
+      }
+
+      if (url === "/api/admin/revisions/revision-1/restore" && options.method === "POST") {
+        return createJsonResponse({ ok: false, error: "not_found" }, { ok: false, status: 404 });
+      }
+
+      if (url === "/api/admin/posts/post-1/publish" && options.method === "POST") {
+        const scenario = publishResponses.shift();
+        detailResponse = scenario.nextPost;
+        listResponse = scenario.nextList;
+        return createJsonResponse(scenario.body, { ok: scenario.ok, status: scenario.status });
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  await elements["publish-post"].click();
+  await flushMicrotasks(4);
+  assert.match(elements["editor-status"].textContent, /save the post before publishing/i);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  await elements["revisions-list"].children[0].children[1].click();
+  await flushMicrotasks(6);
+  assert.match(elements["editor-status"].textContent, /unable to restore this revision right now|could not be found/i);
+
+  await elements["publish-post"].click();
+  await flushMicrotasks(10);
+  assert.ok(
+    fetchCalls.some(({ url, options }) => url === "/api/admin/posts/post-1/publish" && options.method === "POST"),
+    "publish should post to the post publish endpoint",
+  );
+  assert.match(elements["editor-status"].textContent, /publish accepted|deploy triggered/i);
+
+  await elements["publish-post"].click();
+  await flushMicrotasks(10);
+  assert.match(elements["editor-status"].textContent, /publish failed.*restored/i);
+
+  await elements["publish-post"].click();
+  await flushMicrotasks(10);
+  assert.match(elements["editor-status"].textContent, /rollback needs attention/i);
+});
+
+test("admin inline script keeps the latest selection during in-flight restore and publish actions", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  const postsById = {
+    "post-1": {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      body_markdown: "# Hello",
+      status: "draft",
+      revisions: [
+        {
+          id: "revision-1",
+          status: "draft",
+          created_at: "2025-01-01T00:00:00.000Z",
+          title: "First revision",
+          summary: "First summary",
+        },
+      ],
+    },
+    "post-2": {
+      id: "post-2",
+      slug: "second-post",
+      title: "Second Post",
+      summary: "Second summary",
+      body_markdown: "# Second",
+      status: "draft",
+      revisions: [],
+    },
+  };
+  let listResponse = [
+    {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      status: "draft",
+      updated_at: "2025-01-02T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+    {
+      id: "post-2",
+      slug: "second-post",
+      title: "Second Post",
+      summary: "Second summary",
+      status: "draft",
+      updated_at: "2025-01-01T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+  ];
+
+  const restoreDeferred = createDeferred();
+  const publishDeferred = createDeferred();
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ posts: listResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: postsById["post-1"] });
+      }
+
+      if (url === "/api/admin/posts/post-2" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: postsById["post-2"] });
+      }
+
+      if (url === "/api/admin/revisions/revision-1/restore" && options.method === "POST") {
+        return restoreDeferred.promise;
+      }
+
+      if (url === "/api/admin/posts/post-2/publish" && options.method === "POST") {
+        return publishDeferred.promise;
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+  const restorePromise = elements["revisions-list"].children[0].children[1].click();
+  await flushMicrotasks(4);
+
+  await elements["post-list"].children[1].click();
+  await flushMicrotasks(10);
+  restoreDeferred.resolve(createJsonResponse({ ok: true, restored: true }));
+  await restorePromise;
+  await flushMicrotasks(10);
+
+  assert.equal(elements.title.value, "Second Post");
+  assert.equal(elements["revisions-list"].textContent, "No revisions yet.");
+
+  const publishPromise = elements["publish-post"].click();
+  await flushMicrotasks(4);
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+  publishDeferred.resolve(createJsonResponse({ ok: true, publishState: "pending_deploy" }));
+  await publishPromise;
+  await flushMicrotasks(10);
+
+  assert.equal(elements.title.value, "Hello World");
+  assert.equal(elements["revisions-list"].children.length, 1);
+});
+
+test("admin inline script prevents duplicate publish requests and resets on publish not found", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  let publishRequests = 0;
+  let postListRequests = 0;
+  const publishDeferred = createDeferred();
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        postListRequests += 1;
+        return createJsonResponse({
+          posts: postListRequests > 1
+            ? []
+            : [
+                {
+                  id: "post-1",
+                  slug: "hello-world",
+                  title: "Hello World",
+                  summary: "First summary",
+                  status: "draft",
+                  updated_at: "2025-01-01T00:00:00.000Z",
+                  published_at: null,
+                  deleted_at: null,
+                },
+              ],
+        });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({
+          post: {
+            id: "post-1",
+            slug: "hello-world",
+            title: "Hello World",
+            summary: "First summary",
+            body_markdown: "# Hello",
+            status: "draft",
+            revisions: [],
+          },
+        });
+      }
+
+      if (url === "/api/admin/posts/post-1/publish" && options.method === "POST") {
+        publishRequests += 1;
+        if (publishRequests === 1) {
+          return publishDeferred.promise;
+        }
+
+        throw new Error("duplicate publish request should not happen");
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  const firstPublish = elements["publish-post"].click();
+  const secondPublish = elements["publish-post"].click();
+  await flushMicrotasks(4);
+
+  assert.equal(elements["publish-post"].disabled, true);
+  assert.equal(publishRequests, 1);
+
+  publishDeferred.resolve(createJsonResponse({ ok: false, error: "not_found" }, { ok: false, status: 404 }));
+  await Promise.all([firstPublish, secondPublish]);
+  await flushMicrotasks(10);
+
+  assert.equal(elements["publish-post"].disabled, false);
+  assert.equal(elements["post-list"].children.length, 0);
+  assert.equal(elements.title.value, "");
+  assert.match(elements["editor-status"].textContent, /could not be found/i);
 });

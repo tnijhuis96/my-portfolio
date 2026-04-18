@@ -1,5 +1,5 @@
 import { json } from "../../../_lib/json.js";
-import { runOne } from "../../../_lib/db.js";
+import { runAll, runOne } from "../../../_lib/db.js";
 import {
   isDuplicateSlugConstraint,
   isPostValidationError,
@@ -14,9 +14,22 @@ export async function onRequestGet(context) {
     "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
     context.params.id,
   );
-  return post
-    ? json({ post })
-    : json({ ok: false, error: "not_found" }, { status: 404 });
+  if (!post) {
+    return json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+
+  const revisions = await runAll(
+    context.env,
+    "SELECT id, status, created_at, title, summary FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC",
+    context.params.id,
+  );
+
+  return json({
+    post: {
+      ...post,
+      revisions,
+    },
+  });
 }
 
 export async function onRequestPut(context) {

@@ -74,10 +74,13 @@ export async function onRequestGet() {
       const state = {
         session: null,
         activePostId: null,
-        posts: []
+        posts: [],
+        selectionVersion: 0,
+        publishPending: false
       };
 
       const EMPTY_REVISIONS_MESSAGE = "Select or create a post to view history.";
+      const NO_REVISIONS_MESSAGE = "No revisions yet.";
       const loginShell = document.getElementById("login-shell");
       const workspaceShell = document.getElementById("workspace-shell");
       const loginForm = document.getElementById("login-form");
@@ -92,6 +95,7 @@ export async function onRequestGet() {
       const bodyMarkdownInput = document.getElementById("bodyMarkdown");
       const savePostButton = document.getElementById("save-post");
       const deletePostButton = document.getElementById("delete-post");
+      const publishButton = document.getElementById("publish-post");
       const revisionsList = document.getElementById("revisions-list");
 
       function showLogin(message = "") {
@@ -146,13 +150,14 @@ export async function onRequestGet() {
       }
 
       function resetEditor() {
+        beginSelectionChange();
         state.activePostId = null;
         slugInput.value = "";
         titleInput.value = "";
         summaryInput.value = "";
         bodyMarkdownInput.value = "";
         editorStatus.textContent = "";
-        revisionsList.textContent = EMPTY_REVISIONS_MESSAGE;
+        setRevisionsMessage(EMPTY_REVISIONS_MESSAGE);
       }
 
       function getEditorFailureMessage(result, fallbackMessage) {
@@ -176,6 +181,75 @@ export async function onRequestGet() {
 
       function getPostBodyMarkdown(post) {
         return post?.body_markdown ?? post?.bodyMarkdown ?? "";
+      }
+
+      function setRevisionsMessage(message) {
+        revisionsList.replaceChildren();
+        revisionsList.textContent = message;
+      }
+
+      function beginSelectionChange() {
+        state.selectionVersion += 1;
+        return state.selectionVersion;
+      }
+
+      function getRevisionLabel(revision) {
+        const title = revision?.title || "Untitled revision";
+        const status = revision?.status || "draft";
+        const createdAt = revision?.created_at || "Unknown date";
+        return title + " · " + status + " · " + createdAt;
+      }
+
+      function getPublishMessage(result) {
+        if (result?.publishState === "pending_deploy") {
+          return "Publish accepted. Deploy triggered.";
+        }
+
+        if (result?.publishState === "deploy_failed" && result?.rollbackState === "failed") {
+          return "Publish failed. Rollback needs attention.";
+        }
+
+        if (result?.publishState === "deploy_failed") {
+          return "Publish failed and the previous state was restored.";
+        }
+
+        if (result?.error === "not_found") {
+          return "This post could not be found.";
+        }
+
+        return "Unable to publish this post right now.";
+      }
+
+      async function loadRevisions(post) {
+        if (!post?.id) {
+          setRevisionsMessage(EMPTY_REVISIONS_MESSAGE);
+          return [];
+        }
+
+        const revisions = Array.isArray(post.revisions) ? post.revisions : [];
+        if (!revisions.length) {
+          setRevisionsMessage(NO_REVISIONS_MESSAGE);
+          return [];
+        }
+
+        const items = revisions.map((revision) => {
+          const item = document.createElement("div");
+          const label = document.createElement("div");
+          const button = document.createElement("button");
+
+          label.textContent = getRevisionLabel(revision);
+          button.type = "button";
+          button.textContent = "Restore revision";
+          button.addEventListener("click", () => restoreRevision(revision.id));
+
+          item.appendChild(label);
+          item.appendChild(button);
+          return item;
+        });
+
+        revisionsList.textContent = "";
+        revisionsList.replaceChildren(...items);
+        return revisions;
       }
 
       function renderPostList() {
@@ -229,6 +303,7 @@ export async function onRequestGet() {
       }
 
       async function loadPost(id, options = {}) {
+        const selectionVersion = beginSelectionChange();
         editorStatus.textContent = "Loading post...";
 
         try {
@@ -241,9 +316,16 @@ export async function onRequestGet() {
           });
           const result = await readJsonBody(response);
 
+          if (selectionVersion !== state.selectionVersion) {
+            return null;
+          }
+
           if (!response.ok || !result?.post) {
             if (result?.error === "not_found") {
               await loadPosts();
+              if (selectionVersion !== state.selectionVersion) {
+                return null;
+              }
               resetEditor();
               editorStatus.textContent = "This post could not be found.";
               return null;
@@ -258,7 +340,7 @@ export async function onRequestGet() {
           titleInput.value = result.post.title || "";
           summaryInput.value = result.post.summary || "";
           bodyMarkdownInput.value = getPostBodyMarkdown(result.post);
-          revisionsList.textContent = EMPTY_REVISIONS_MESSAGE;
+          await loadRevisions(result.post);
           editorStatus.textContent = options.statusMessage || "";
           return result.post;
         } catch {
@@ -349,6 +431,101 @@ export async function onRequestGet() {
         }
       }
 
+      async function restoreRevision(revisionId) {
+        if (!state.activePostId) {
+          editorStatus.textContent = "Select a post before restoring a revision.";
+          return;
+        }
+
+        const activePostId = state.activePostId;
+        const selectionVersion = state.selectionVersion;
+        editorStatus.textContent = "Restoring revision...";
+
+        try {
+          const response = await fetch("/api/admin/revisions/" + encodeURIComponent(revisionId) + "/restore", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              accept: "application/json"
+            }
+          });
+          const result = await readJsonBody(response);
+
+          if (!response.ok || !result?.ok) {
+            if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
+              return;
+            }
+            editorStatus.textContent = result?.error === "not_found"
+              ? "This revision could not be found."
+              : "Unable to restore this revision right now.";
+            return;
+          }
+
+          await loadPosts();
+          if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
+            return;
+          }
+          await loadPost(activePostId, { statusMessage: "Revision restored." });
+        } catch {
+          if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
+            return;
+          }
+          editorStatus.textContent = "Unable to restore this revision right now.";
+        }
+      }
+
+      async function publishPost() {
+        if (!state.activePostId) {
+          editorStatus.textContent = "Save the post before publishing.";
+          return;
+        }
+
+        if (state.publishPending) {
+          return;
+        }
+
+        const activePostId = state.activePostId;
+        const selectionVersion = state.selectionVersion;
+        state.publishPending = true;
+        publishButton.disabled = true;
+        editorStatus.textContent = "Publishing post...";
+
+        try {
+          const response = await fetch(window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(activePostId) + "/publish", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              accept: "application/json"
+            }
+          });
+          const result = await readJsonBody(response);
+          const statusMessage = getPublishMessage(result);
+
+          if (!response.ok && result?.error === "not_found") {
+            await loadPosts();
+            if (selectionVersion === state.selectionVersion && state.activePostId === activePostId) {
+              resetEditor();
+              editorStatus.textContent = statusMessage;
+            }
+            return;
+          }
+
+          await loadPosts();
+          if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
+            return;
+          }
+          await loadPost(activePostId, { statusMessage });
+        } catch {
+          if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
+            return;
+          }
+          editorStatus.textContent = "Unable to publish this post right now.";
+        } finally {
+          state.publishPending = false;
+          publishButton.disabled = false;
+        }
+      }
+
       async function bootstrapSession(message) {
         try {
           const response = await fetch(window.CMS_ENDPOINTS.session, {
@@ -412,6 +589,7 @@ export async function onRequestGet() {
       newPostButton.addEventListener("click", resetEditor);
       savePostButton.addEventListener("click", savePost);
       deletePostButton.addEventListener("click", deletePost);
+      publishButton.addEventListener("click", publishPost);
       bootstrapSession();
     </script>
   </body>
