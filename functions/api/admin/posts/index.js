@@ -1,5 +1,5 @@
 import { json } from "../../../_lib/json.js";
-import { createPost } from "../../../_lib/content.js";
+import { createPost, isDuplicateSlugConstraint } from "../../../_lib/content.js";
 import { runAll } from "../../../_lib/db.js";
 
 export async function onRequestGet(context) {
@@ -18,6 +18,14 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
 
-  const post = await createPost(context.env, body);
-  return json({ ok: true, post }, { status: 201 });
+  try {
+    const post = await createPost(context.env, body);
+    return json({ ok: true, post }, { status: 201 });
+  } catch (error) {
+    if (isDuplicateSlugConstraint(error)) {
+      return json({ ok: false, error: "duplicate_slug" }, { status: 409 });
+    }
+
+    throw error;
+  }
 }

@@ -2,6 +2,18 @@ import crypto from "node:crypto";
 import { marked } from "marked";
 import { normalizePostRecord } from "./db.js";
 
+const SAFE_LINK_SCHEMES = new Set(["http", "https", "mailto"]);
+const NAMED_HTML_ENTITIES = new Map([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+  ["tab", "\t"],
+  ["newline", "\n"],
+  ["colon", ":"],
+]);
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -24,18 +36,54 @@ export function sanitizePostBody(markdown) {
   return escapeHtml(String(markdown ?? ""));
 }
 
+function decodeHtmlEntities(value) {
+  return String(value ?? "").replaceAll(/&(#x[0-9a-f]+|#\d+|[a-z]+);?/gi, (entity, token) => {
+    if (token[0] === "#") {
+      const isHex = token[1]?.toLowerCase() === "x";
+      const codePoint = Number.parseInt(token.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10FFFF
+        ? String.fromCodePoint(codePoint)
+        : entity;
+    }
+
+    return NAMED_HTML_ENTITIES.get(token.toLowerCase()) ?? entity;
+  });
+}
+
 function sanitizeLinkHref(href) {
   const value = String(href ?? "").trim();
   if (!value) {
     return null;
   }
 
-  const normalized = value.replace(/[\u0000-\u001F\u007F\s]+/g, "").toLowerCase();
-  if (/^(javascript|data|vbscript):/.test(normalized)) {
+  const normalized = decodeHtmlEntities(value)
+    .replace(/[\u0000-\u001F\u007F\s]+/g, "")
+    .toLowerCase();
+
+  if (
+    normalized.startsWith("#")
+    || normalized.startsWith("?")
+    || normalized.startsWith("./")
+    || normalized.startsWith("../")
+    || (normalized.startsWith("/") && !normalized.startsWith("//"))
+  ) {
+    return value;
+  }
+
+  const schemeMatch = normalized.match(/^([a-z][a-z0-9+.-]*):/);
+  if (schemeMatch) {
+    return SAFE_LINK_SCHEMES.has(schemeMatch[1]) ? value : null;
+  }
+
+  if (normalized.startsWith("//")) {
     return null;
   }
 
   return value;
+}
+
+export function isDuplicateSlugConstraint(error) {
+  return /unique constraint failed:\s*cms_posts\.slug/i.test(String(error?.message ?? error ?? ""));
 }
 
 export function renderPostHtml(markdown) {

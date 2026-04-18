@@ -1,6 +1,10 @@
 import { json } from "../../../_lib/json.js";
 import { runOne } from "../../../_lib/db.js";
-import { normalizePostInput, renderPostHtml } from "../../../_lib/content.js";
+import {
+  isDuplicateSlugConstraint,
+  normalizePostInput,
+  renderPostHtml,
+} from "../../../_lib/content.js";
 
 export async function onRequestGet(context) {
   const post = await runOne(
@@ -25,20 +29,29 @@ export async function onRequestPut(context) {
   const now = new Date().toISOString();
   const sanitizedHtml = renderPostHtml(body.bodyMarkdown);
 
-  const result = await context.env.CMS_DB.prepare(
-    "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-  )
-    .bind(
-      body.slug,
-      body.title,
-      body.summary,
-      body.bodyMarkdown,
-      sanitizedHtml,
-      body.status,
-      now,
-      context.params.id,
+  let result;
+  try {
+    result = await context.env.CMS_DB.prepare(
+      "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
     )
-    .run();
+      .bind(
+        body.slug,
+        body.title,
+        body.summary,
+        body.bodyMarkdown,
+        sanitizedHtml,
+        body.status,
+        now,
+        context.params.id,
+      )
+      .run();
+  } catch (error) {
+    if (isDuplicateSlugConstraint(error)) {
+      return json({ ok: false, error: "duplicate_slug" }, { status: 409 });
+    }
+
+    throw error;
+  }
 
   if (result.meta.changes === 0) {
     return json({ ok: false, error: "not_found" }, { status: 404 });

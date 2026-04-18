@@ -27,6 +27,16 @@ function createContentTestEnv() {
     revisions: new Map(),
   };
 
+  function findPostBySlug(slug) {
+    for (const post of state.posts.values()) {
+      if (post.slug === slug) {
+        return post;
+      }
+    }
+
+    return null;
+  }
+
   function normalizeQuery(query) {
     return query.replace(/\s+/g, " ").trim();
   }
@@ -76,6 +86,10 @@ function createContentTestEnv() {
       async run() {
         if (normalizedQuery === "INSERT INTO cms_posts (id, slug, title, summary, body_markdown, sanitized_html, status, published_at, deleted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)") {
           const [id, slug, title, summary, bodyMarkdown, sanitizedHtml, status, publishedAt, deletedAt, updatedAt] = bindings;
+          if (findPostBySlug(slug)) {
+            throw new Error("UNIQUE constraint failed: cms_posts.slug");
+          }
+
           state.posts.set(id, {
             id,
             slug,
@@ -99,6 +113,11 @@ function createContentTestEnv() {
           const existing = state.posts.get(id);
           if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
             return { success: true, meta: { changes: 0 } };
+          }
+
+          const duplicateSlugPost = findPostBySlug(slug);
+          if (duplicateSlugPost && duplicateSlugPost.id !== id) {
+            throw new Error("UNIQUE constraint failed: cms_posts.slug");
           }
 
           state.posts.set(id, {
@@ -253,6 +272,16 @@ test("renderPostHtml neutralizes dangerous markdown links", () => {
   const html = renderPostHtml("[x](javascript:alert(1)) and [ok](https://example.com)");
   assert.doesNotMatch(html, /href="javascript:alert\(1\)"/);
   assert.match(html, /<a[^>]*href="https:\/\/example\.com"[^>]*>ok<\/a>/);
+});
+
+test("renderPostHtml neutralizes entity-obfuscated javascript links", () => {
+  const html = renderPostHtml(
+    "[x](j&#97;vascript:alert(1)) [y](javascript&#58;alert(1)) and [ok](#section)",
+  );
+  assert.doesNotMatch(html, /<a[^>]*>x<\/a>/);
+  assert.doesNotMatch(html, /<a[^>]*>y<\/a>/);
+  assert.doesNotMatch(html, /href="(?:j&#97;vascript:alert\(1\)|javascript&#58;alert\(1\))"/);
+  assert.match(html, /<a[^>]*href="#section"[^>]*>ok<\/a>/);
 });
 
 test("renderPostHtml preserves markdown code escaping without double encoding", () => {
@@ -626,6 +655,89 @@ test("post update returns invalid_json for malformed request bodies", async () =
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
   assert.equal(state.posts.get("post_1").title, "Hello world");
+});
+
+test("post create returns conflict for duplicate slugs", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_existing", {
+    id: "post_existing",
+    slug: "hello-world",
+    title: "Existing",
+    summary: "Existing summary",
+    body_markdown: "# Existing",
+    sanitized_html: "<h1>Existing</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  const response = await onRequestPostsCreate({
+    env,
+    request: new Request("https://example.com/api/admin/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "hello-world",
+        title: "Duplicate",
+        summary: "Duplicate summary",
+        bodyMarkdown: "# Duplicate",
+        status: "draft",
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { ok: false, error: "duplicate_slug" });
+  assert.equal(state.posts.size, 1);
+});
+
+test("post update returns conflict for duplicate slugs", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+  state.posts.set("post_2", {
+    id: "post_2",
+    slug: "taken-slug",
+    title: "Taken",
+    summary: "Taken summary",
+    body_markdown: "# Taken",
+    sanitized_html: "<h1>Taken</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-03T12:00:00.000Z",
+  });
+
+  const response = await onRequestPostPut({
+    env,
+    params: { id: "post_1" },
+    request: new Request("https://example.com/api/admin/posts/post_1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "taken-slug",
+        title: "Updated title",
+        summary: "Updated summary",
+        bodyMarkdown: "# Updated",
+        status: "draft",
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { ok: false, error: "duplicate_slug" });
+  assert.equal(state.posts.get("post_1").slug, "hello-world");
 });
 
 test("post publish route remains a placeholder", async () => {
