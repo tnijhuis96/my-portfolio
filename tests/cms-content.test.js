@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { sanitizePostBody } from "../functions/_lib/content.js";
 import { normalizePostRecord } from "../functions/_lib/db.js";
 
 test("normalizePostRecord maps D1 rows into CMS post objects", () => {
@@ -33,6 +34,11 @@ test("normalizePostRecord maps D1 rows into CMS post objects", () => {
 
 test("normalizePostRecord returns null for missing rows", () => {
   assert.equal(normalizePostRecord(null), null);
+});
+
+test("sanitizePostBody strips raw script tags", () => {
+  const result = sanitizePostBody("hello <script>alert(1)</script>");
+  assert.equal(result.includes("<script>"), false);
 });
 
 test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
