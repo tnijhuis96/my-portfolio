@@ -14,6 +14,8 @@ function createTestEnv(options = {}) {
     auditLog: [],
     sessions: new Map(),
     failAuditWrites: options.failAuditWrites ?? false,
+    failSessionLookup: options.failSessionLookup ?? false,
+    failSessionDelete: options.failSessionDelete ?? false,
     uniqueInsertRaceKeys: new Set(options.uniqueInsertRaceKeys ?? []),
     racedInsertKeys: new Set(),
     concurrentIncrementKeys: new Set(options.concurrentIncrementKeys ?? []),
@@ -32,6 +34,10 @@ function createTestEnv(options = {}) {
         }
 
         if (query.includes("FROM cms_sessions")) {
+          if (state.failSessionLookup) {
+            throw new Error("session lookup failed");
+          }
+
           const [id] = bindings;
           return state.sessions.get(id) ?? null;
         }
@@ -192,6 +198,10 @@ function createTestEnv(options = {}) {
         }
 
         if (query.startsWith("DELETE FROM cms_sessions WHERE id = ?")) {
+          if (state.failSessionDelete) {
+            throw new Error("session delete failed");
+          }
+
           const [id] = bindings;
           const deleted = state.sessions.delete(id);
           return { success: true, meta: { changes: deleted ? 1 : 0 } };
@@ -495,6 +505,58 @@ test("logout route deletes the stored session, logs the event, and clears the co
     JSON.parse(state.auditLog[0].metadata_json),
     { sessionId: "session_123" },
   );
+});
+
+test("logout route still clears the cookie when session lookup fails", async () => {
+  const { env, state } = createTestEnv({ failSessionLookup: true });
+  state.sessions.set("session_123", {
+    id: "session_123",
+    user_id: "admin@example.com",
+    csrf_token: "csrf_123",
+    created_at: "2025-01-01T00:00:00.000Z",
+    expires_at: "2025-01-01T08:00:00.000Z",
+  });
+
+  const response = await onRequestLogoutPost({
+    env,
+    request: new Request("https://example.com/api/admin/logout", {
+      method: "POST",
+      headers: {
+        cookie: "cms_session=session_123",
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(state.sessions.has("session_123"), true);
+  assert.match(response.headers.get("set-cookie") ?? "", /^cms_session=/);
+  assert.equal(state.auditLog.length, 0);
+});
+
+test("logout route still clears the cookie when session deletion fails", async () => {
+  const { env, state } = createTestEnv({ failSessionDelete: true });
+  state.sessions.set("session_123", {
+    id: "session_123",
+    user_id: "admin@example.com",
+    csrf_token: "csrf_123",
+    created_at: "2025-01-01T00:00:00.000Z",
+    expires_at: "2025-01-01T08:00:00.000Z",
+  });
+
+  const response = await onRequestLogoutPost({
+    env,
+    request: new Request("https://example.com/api/admin/logout", {
+      method: "POST",
+      headers: {
+        cookie: "cms_session=session_123",
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(state.sessions.has("session_123"), true);
+  assert.match(response.headers.get("set-cookie") ?? "", /^cms_session=/);
+  assert.equal(state.auditLog.length, 0);
 });
 
 test("logout route still clears the cookie when audit logging fails", async () => {
