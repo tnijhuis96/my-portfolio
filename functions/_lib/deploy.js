@@ -1,6 +1,11 @@
 export function buildDeployHeaders(env) {
-  return {
+  const headers = {
     "content-type": "application/json",
-    "x-deploy-secret": env.PAGES_DEPLOY_HOOK_SECRET,
   };
+
+  if (env.PAGES_DEPLOY_HOOK_SECRET) {
+    headers["x-deploy-secret"] = env.PAGES_DEPLOY_HOOK_SECRET;
+  }
+
+  return headers;
 }

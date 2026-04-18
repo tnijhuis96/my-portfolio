@@ -12,6 +12,7 @@ import {
   onRequestPut as onRequestPostPut,
   onRequestDelete as onRequestPostDelete,
 } from "../functions/api/admin/posts/[id].js";
+import { onRequestPost as onRequestPostPublish } from "../functions/api/admin/posts/[id]/publish.js";
 import { onRequestPost as onRequestPostsCreate } from "../functions/api/admin/posts/index.js";
 import { onRequestPost as onRequestRestoreRevision } from "../functions/api/admin/revisions/[id]/restore.js";
 
@@ -119,6 +120,15 @@ test("placeholder mutation routes return not implemented responses", async () =>
     error: "not_implemented",
     message: "Revision restore is not implemented in Task 5.",
   });
+
+  const postPublish = await onRequestPostPublish();
+  assert.equal(postPublish.status, 501);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    error: "not_implemented",
+    message: "Post publish is not implemented yet.",
+    publishState: "pending_deploy",
+  });
 });
 
 test("placeholder read routes remain successful", async () => {
@@ -139,7 +149,12 @@ test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
   );
 });
 
-test("buildDeployHeaders keeps deploy secret server-side", () => {
+test("buildDeployHeaders returns content type and optional deploy secret", () => {
   const headers = buildDeployHeaders({ PAGES_DEPLOY_HOOK_SECRET: "secret" });
+  assert.equal(headers["content-type"], "application/json");
   assert.equal(headers["x-deploy-secret"], "secret");
+
+  const headersWithoutSecret = buildDeployHeaders({});
+  assert.equal(headersWithoutSecret["content-type"], "application/json");
+  assert.equal("x-deploy-secret" in headersWithoutSecret, false);
 });
