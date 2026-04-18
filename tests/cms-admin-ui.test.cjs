@@ -356,7 +356,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
     slug: "hello-world",
     title: "Hello World",
     summary: "First summary",
-    body_markdown: "# Hello",
+    body_markdown: "\n# Hello  \n",
     status: "draft",
   };
 
@@ -434,7 +434,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
   assert.equal(elements.slug.value, "hello-world");
   assert.equal(elements.title.value, "Hello World");
   assert.equal(elements.summary.value, "First summary");
-  assert.equal(elements.bodyMarkdown.value, "# Hello");
+  assert.equal(elements.bodyMarkdown.value, "\n# Hello  \n");
 
   elements.title.value = "Updated Title";
   await elements["save-post"].click();
@@ -447,7 +447,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
     slug: "hello-world",
     title: "Updated Title",
     summary: "First summary",
-    bodyMarkdown: "# Hello",
+    bodyMarkdown: "\n# Hello  \n",
     status: "draft",
   });
   assert.match(elements["editor-status"].textContent, /saved/i);
@@ -723,6 +723,7 @@ test("admin inline script renders revision states and refreshes after restoring 
         created_at: "2025-01-02T00:00:00.000Z",
         title: "Second revision",
         summary: "Second summary",
+        slug_source: "legacy_backfill",
       },
       {
         id: "revision-1",
@@ -730,6 +731,7 @@ test("admin inline script renders revision states and refreshes after restoring 
         created_at: "2025-01-01T00:00:00.000Z",
         title: "First revision",
         summary: "First summary",
+        slug_source: "captured",
       },
     ],
   };
@@ -739,6 +741,7 @@ test("admin inline script renders revision states and refreshes after restoring 
 
   assert.equal(elements["revisions-list"].children.length, 2);
   assert.match(elements["revisions-list"].children[0].children[0].textContent, /Second revision/);
+  assert.match(elements["revisions-list"].children[0].children[0].textContent, /legacy slug/i);
   assert.match(elements["revisions-list"].children[0].children[1].textContent, /restore/i);
 
   await elements["revisions-list"].children[0].children[1].click();

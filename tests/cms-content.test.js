@@ -1146,6 +1146,7 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
           created_at: "2025-04-01T12:00:00.000Z",
           title: "Restored title",
           summary: "Restored summary",
+          slug_source: "captured",
         },
         {
           id: "revision_2",
@@ -1153,6 +1154,7 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
           created_at: "2025-03-01T12:00:00.000Z",
           title: "Older title",
           summary: "Older summary",
+          slug_source: "legacy_backfill",
         },
       ],
     },

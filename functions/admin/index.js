@@ -148,7 +148,7 @@ export async function onRequestGet() {
           slug: slugInput.value.trim(),
           title: titleInput.value.trim(),
           summary: summaryInput.value.trim(),
-          bodyMarkdown: bodyMarkdownInput.value.trim(),
+          bodyMarkdown: bodyMarkdownInput.value,
           status: "draft"
         };
       }
@@ -260,7 +260,10 @@ export async function onRequestGet() {
         const title = revision?.title || "Untitled revision";
         const status = revision?.status || "draft";
         const createdAt = revision?.created_at || "Unknown date";
-        return title + " · " + status + " · " + createdAt;
+        const legacySlugNote = revision?.slug_source === "legacy_backfill"
+          ? " · legacy slug"
+          : "";
+        return title + " · " + status + " · " + createdAt + legacySlugNote;
       }
 
       function getPublishMessage(result) {

@@ -28,7 +28,7 @@ export async function onRequestGet(context) {
 
   const revisions = await runAll(
     context.env,
-    "SELECT id, status, created_at, title, summary FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC",
+    "SELECT id, status, created_at, title, summary, slug_source FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC",
     context.params.id,
   );
 
