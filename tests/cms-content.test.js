@@ -164,6 +164,15 @@ test("buildDeployHeaders tolerates missing env and falls back to legacy secret",
   assert.equal(headersWithoutEnv["content-type"], "application/json");
   assert.equal("x-deploy-secret" in headersWithoutEnv, false);
 
+  const headersWithBlankPrimarySecret = buildDeployHeaders({
+    PAGES_DEPLOY_HOOK_SECRET: "",
+    DEPLOY_WEBHOOK_SECRET: "legacy-secret",
+  });
+  assert.equal(
+    headersWithBlankPrimarySecret["x-deploy-secret"],
+    "legacy-secret",
+  );
+
   const headersWithLegacySecret = buildDeployHeaders({
     DEPLOY_WEBHOOK_SECRET: "legacy-secret",
   });

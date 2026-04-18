@@ -3,8 +3,11 @@ export function buildDeployHeaders(env) {
     "content-type": "application/json",
   };
 
+  const primaryDeploySecret = env?.PAGES_DEPLOY_HOOK_SECRET;
   const deploySecret =
-    env?.PAGES_DEPLOY_HOOK_SECRET ?? env?.DEPLOY_WEBHOOK_SECRET;
+    primaryDeploySecret === "" || primaryDeploySecret == null
+      ? env?.DEPLOY_WEBHOOK_SECRET
+      : primaryDeploySecret;
 
   if (deploySecret) {
     headers["x-deploy-secret"] = deploySecret;
