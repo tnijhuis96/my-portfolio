@@ -70,6 +70,88 @@ export async function onRequestGet() {
         logout: "/api/admin/logout",
         posts: "/api/admin/posts"
       };
+
+      const state = {
+        session: null
+      };
+
+      const loginShell = document.getElementById("login-shell");
+      const workspaceShell = document.getElementById("workspace-shell");
+      const loginForm = document.getElementById("login-form");
+      const loginStatus = document.getElementById("login-status");
+      const editorStatus = document.getElementById("editor-status");
+      const passwordInput = document.getElementById("password");
+
+      function showLogin(message = "") {
+        state.session = null;
+        loginShell.hidden = false;
+        workspaceShell.hidden = true;
+        loginStatus.textContent = message;
+        editorStatus.textContent = "";
+      }
+
+      function showWorkspace(message = "") {
+        loginShell.hidden = true;
+        workspaceShell.hidden = false;
+        loginStatus.textContent = "";
+        editorStatus.textContent = message;
+      }
+
+      async function bootstrapSession(message) {
+        try {
+          const response = await fetch(window.CMS_ENDPOINTS.session, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+              accept: "application/json"
+            }
+          });
+          const session = await response.json();
+          state.session = session;
+
+          if (session.authenticated) {
+            showWorkspace(message || "Signed in.");
+            return;
+          }
+
+          showLogin(message || "Please log in.");
+        } catch {
+          showLogin("Unable to verify the current session.");
+        }
+      }
+
+      async function handleLogin(event) {
+        event.preventDefault();
+        loginStatus.textContent = "Signing in...";
+
+        try {
+          const response = await fetch(window.CMS_ENDPOINTS.login, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json"
+            },
+            body: JSON.stringify({
+              password: passwordInput.value
+            })
+          });
+          const result = await response.json();
+
+          if (!response.ok || !result.ok || !result.authenticated) {
+            showLogin("Incorrect password. Try again.");
+            return;
+          }
+
+          passwordInput.value = "";
+          await bootstrapSession("Signed in.");
+        } catch {
+          showLogin("Unable to sign in right now.");
+        }
+      }
+
+      loginForm.addEventListener("submit", handleLogin);
+      bootstrapSession();
     </script>
   </body>
 </html>`,
