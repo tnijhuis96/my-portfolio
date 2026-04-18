@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  createPost,
   normalizePostInput,
+  renderPostHtml,
   sanitizePostBody,
 } from "../functions/_lib/content.js";
 import { buildDeployHeaders } from "../functions/_lib/deploy.js";
@@ -13,8 +15,158 @@ import {
   onRequestDelete as onRequestPostDelete,
 } from "../functions/api/admin/posts/[id].js";
 import { onRequestPost as onRequestPostPublish } from "../functions/api/admin/posts/[id]/publish.js";
-import { onRequestPost as onRequestPostsCreate } from "../functions/api/admin/posts/index.js";
+import {
+  onRequestGet as onRequestPostsGet,
+  onRequestPost as onRequestPostsCreate,
+} from "../functions/api/admin/posts/index.js";
 import { onRequestPost as onRequestRestoreRevision } from "../functions/api/admin/revisions/[id]/restore.js";
+
+function createContentTestEnv() {
+  const state = {
+    posts: new Map(),
+    revisions: new Map(),
+  };
+
+  function normalizeQuery(query) {
+    return query.replace(/\s+/g, " ").trim();
+  }
+
+  function buildStatement(query, bindings = []) {
+    const normalizedQuery = normalizeQuery(query);
+
+    return {
+      bind(...nextBindings) {
+        return buildStatement(query, nextBindings);
+      },
+      async first() {
+        if (normalizedQuery === "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL") {
+          const [id] = bindings;
+          const post = state.posts.get(id) ?? null;
+          return post?.deleted_at ? null : post;
+        }
+
+        if (normalizedQuery === "SELECT * FROM cms_post_revisions WHERE id = ?") {
+          const [id] = bindings;
+          return state.revisions.get(id) ?? null;
+        }
+
+        throw new Error(`Unsupported first() query: ${normalizedQuery}`);
+      },
+      async all() {
+        if (normalizedQuery === "SELECT id, slug, title, summary, status, published_at, deleted_at, updated_at FROM cms_posts WHERE deleted_at IS NULL ORDER BY updated_at DESC") {
+          return {
+            results: [...state.posts.values()]
+              .filter((post) => post.deleted_at === null)
+              .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+              .map((post) => ({
+                id: post.id,
+                slug: post.slug,
+                title: post.title,
+                summary: post.summary,
+                status: post.status,
+                published_at: post.published_at,
+                deleted_at: post.deleted_at,
+                updated_at: post.updated_at,
+              })),
+          };
+        }
+
+        throw new Error(`Unsupported all() query: ${normalizedQuery}`);
+      },
+      async run() {
+        if (normalizedQuery === "INSERT INTO cms_posts (id, slug, title, summary, body_markdown, sanitized_html, status, published_at, deleted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)") {
+          const [id, slug, title, summary, bodyMarkdown, sanitizedHtml, status, publishedAt, deletedAt, updatedAt] = bindings;
+          state.posts.set(id, {
+            id,
+            slug,
+            title,
+            summary,
+            body_markdown: bodyMarkdown,
+            sanitized_html: sanitizedHtml,
+            status,
+            published_at: publishedAt,
+            deleted_at: deletedAt,
+            updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (
+          normalizedQuery === "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ?"
+          || normalizedQuery === "UPDATE cms_posts SET slug = ?, title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        ) {
+          const [slug, title, summary, bodyMarkdown, sanitizedHtml, status, updatedAt, id] = bindings;
+          const existing = state.posts.get(id);
+          if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
+            return { success: true, meta: { changes: 0 } };
+          }
+
+          state.posts.set(id, {
+            ...existing,
+            slug,
+            title,
+            summary,
+            body_markdown: bodyMarkdown,
+            sanitized_html: sanitizedHtml,
+            status,
+            updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (
+          normalizedQuery === "UPDATE cms_posts SET deleted_at = ?, updated_at = ? WHERE id = ?"
+          || normalizedQuery === "UPDATE cms_posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        ) {
+          const [deletedAt, updatedAt, id] = bindings;
+          const existing = state.posts.get(id);
+          if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
+            return { success: true, meta: { changes: 0 } };
+          }
+
+          state.posts.set(id, {
+            ...existing,
+            deleted_at: deletedAt,
+            updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        if (normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ?") {
+          const [title, summary, bodyMarkdown, sanitizedHtml, status, updatedAt, id] = bindings;
+          const existing = state.posts.get(id);
+          if (!existing) {
+            return { success: true, meta: { changes: 0 } };
+          }
+
+          state.posts.set(id, {
+            ...existing,
+            title,
+            summary,
+            body_markdown: bodyMarkdown,
+            sanitized_html: sanitizedHtml,
+            status,
+            updated_at: updatedAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
+        throw new Error(`Unsupported run() query: ${normalizedQuery}`);
+      },
+    };
+  }
+
+  return {
+    env: {
+      CMS_DB: {
+        prepare(query) {
+          return buildStatement(query);
+        },
+      },
+    },
+    state,
+  };
+}
 
 test("normalizePostRecord maps D1 rows into CMS post objects", () => {
   const result = normalizePostRecord({
@@ -88,39 +240,271 @@ test("normalizePostInput handles missing input and trims status", () => {
   );
 });
 
-test("placeholder mutation routes return not implemented responses", async () => {
-  const postCreate = await onRequestPostsCreate();
-  assert.equal(postCreate.status, 501);
-  assert.deepEqual(await postCreate.json(), {
-    ok: false,
-    error: "not_implemented",
-    message: "Post creation is not implemented in Task 5.",
+test("renderPostHtml converts markdown into safe html", () => {
+  const html = renderPostHtml("## Title\n\nParagraph <script>alert(1)</script>");
+  assert.match(html, /<h2[^>]*>Title<\/h2>/);
+  assert.match(html, /<p>Paragraph &lt;script&gt;alert\(1\)&lt;\/script&gt;<\/p>/);
+});
+
+test("normalizePostInput trims slug/title/summary/status", () => {
+  const result = normalizePostInput({
+    slug: " hello-world ",
+    title: " Hello ",
+    summary: " Summary ",
+    bodyMarkdown: "# Post",
+    status: " draft ",
   });
 
-  const postUpdate = await onRequestPostPut();
-  assert.equal(postUpdate.status, 501);
-  assert.deepEqual(await postUpdate.json(), {
-    ok: false,
-    error: "not_implemented",
-    message: "Post updates are not implemented in Task 5.",
+  assert.equal(result.slug, "hello-world");
+  assert.equal(result.title, "Hello");
+  assert.equal(result.summary, "Summary");
+  assert.equal(result.status, "draft");
+});
+
+test("createPost persists normalized markdown content", async () => {
+  const { env, state } = createContentTestEnv();
+
+  const post = await createPost(env, {
+    slug: " hello-world ",
+    title: " Hello ",
+    summary: " Summary ",
+    bodyMarkdown: "## Title\n\nParagraph <script>alert(1)</script>",
+    status: " draft ",
   });
 
-  const postDelete = await onRequestPostDelete();
-  assert.equal(postDelete.status, 501);
-  assert.deepEqual(await postDelete.json(), {
-    ok: false,
-    error: "not_implemented",
-    message: "Post deletion is not implemented in Task 5.",
+  assert.equal(post.slug, "hello-world");
+  assert.match(post.id, /^[0-9a-f-]{36}$/);
+  assert.match(post.updated_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(post.sanitized_html, /<h2[^>]*>Title<\/h2>/);
+  assert.match(post.sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.equal(state.posts.size, 1);
+});
+
+test("posts index routes create and list persisted posts", async () => {
+  const { env, state } = createContentTestEnv();
+
+  const createResponse = await onRequestPostsCreate({
+    env,
+    request: new Request("https://example.com/api/admin/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: " hello-world ",
+        title: " Hello ",
+        summary: " Summary ",
+        bodyMarkdown: "## Title\n\nParagraph",
+        status: " draft ",
+      }),
+    }),
   });
 
-  const revisionRestore = await onRequestRestoreRevision();
-  assert.equal(revisionRestore.status, 501);
-  assert.deepEqual(await revisionRestore.json(), {
-    ok: false,
-    error: "not_implemented",
-    message: "Revision restore is not implemented in Task 5.",
+  assert.equal(createResponse.status, 201);
+  const createdBody = await createResponse.json();
+  assert.equal(createdBody.ok, true);
+  assert.equal(createdBody.post.slug, "hello-world");
+  assert.equal(state.posts.size, 1);
+
+  state.posts.set("post_older", {
+    id: "post_older",
+    slug: "older-post",
+    title: "Older",
+    summary: "Older summary",
+    body_markdown: "# Older",
+    sanitized_html: "<h1>Older</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-01-01T00:00:00.000Z",
   });
 
+  const listResponse = await onRequestPostGet({
+    env,
+    params: { id: createdBody.post.id },
+  });
+  assert.equal(listResponse.status, 200);
+
+  const indexResponse = await onRequestPostsGet({ env });
+  assert.equal(indexResponse.status, 200);
+  assert.deepEqual(await indexResponse.json(), {
+    posts: [
+      {
+        id: createdBody.post.id,
+        slug: "hello-world",
+        title: "Hello",
+        summary: "Summary",
+        status: "draft",
+        published_at: null,
+        deleted_at: null,
+        updated_at: createdBody.post.updated_at,
+      },
+      {
+        id: "post_older",
+        slug: "older-post",
+        title: "Older",
+        summary: "Older summary",
+        status: "draft",
+        published_at: null,
+        deleted_at: null,
+        updated_at: "2025-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+});
+
+test("post routes read, update, delete, and restore revisions from D1 data", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+  state.revisions.set("revision_1", {
+    id: "revision_1",
+    post_id: "post_1",
+    title: "Restored title",
+    summary: "Restored summary",
+    body_markdown: "## Restored\n\n<script>alert(1)</script>",
+    sanitized_html: "<script>unsafe</script>",
+    status: "published",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const readResponse = await onRequestPostGet({
+    env,
+    params: { id: "post_1" },
+  });
+  assert.equal(readResponse.status, 200);
+  assert.equal((await readResponse.json()).post.id, "post_1");
+
+  const updateResponse = await onRequestPostPut({
+    env,
+    params: { id: "post_1" },
+    request: new Request("https://example.com/api/admin/posts/post_1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: " updated-post ",
+        title: " Updated title ",
+        summary: " Updated summary ",
+        bodyMarkdown: "## Updated\n\nParagraph <script>alert(1)</script>",
+        status: " published ",
+      }),
+    }),
+  });
+  assert.equal(updateResponse.status, 200);
+  assert.deepEqual(await updateResponse.json(), { ok: true });
+  assert.equal(state.posts.get("post_1").slug, "updated-post");
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+
+  const deleteResponse = await onRequestPostDelete({
+    env,
+    params: { id: "post_1" },
+  });
+  assert.equal(deleteResponse.status, 200);
+  assert.deepEqual(await deleteResponse.json(), { ok: true, deleted: true });
+  assert.match(state.posts.get("post_1").deleted_at, /^\d{4}-\d{2}-\d{2}T/);
+
+  state.posts.set("post_1", {
+    ...state.posts.get("post_1"),
+    deleted_at: null,
+  });
+
+  const restoreResponse = await onRequestRestoreRevision({
+    env,
+    params: { id: "revision_1" },
+  });
+  assert.equal(restoreResponse.status, 200);
+  assert.deepEqual(await restoreResponse.json(), { ok: true, restored: true });
+  assert.equal(state.posts.get("post_1").title, "Restored title");
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").sanitized_html, /<h2[^>]*>Restored<\/h2>/);
+  assert.match(state.posts.get("post_1").sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(state.posts.get("post_1").sanitized_html, /<script>unsafe<\/script>/);
+
+  const missingResponse = await onRequestRestoreRevision({
+    env,
+    params: { id: "missing" },
+  });
+  assert.equal(missingResponse.status, 404);
+  assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
+});
+
+test("post update and delete return not_found for missing or soft-deleted posts", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_deleted", {
+    id: "post_deleted",
+    slug: "deleted-post",
+    title: "Deleted",
+    summary: "Deleted summary",
+    body_markdown: "# Deleted",
+    sanitized_html: "<h1>Deleted</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: "2025-04-03T12:00:00.000Z",
+    updated_at: "2025-04-03T12:00:00.000Z",
+  });
+
+  const missingUpdate = await onRequestPostPut({
+    env,
+    params: { id: "missing" },
+    request: new Request("https://example.com/api/admin/posts/missing", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "missing",
+        title: "Missing",
+        summary: "Missing summary",
+        bodyMarkdown: "# Missing",
+        status: "draft",
+      }),
+    }),
+  });
+  assert.equal(missingUpdate.status, 404);
+  assert.deepEqual(await missingUpdate.json(), { ok: false, error: "not_found" });
+
+  const deletedUpdate = await onRequestPostPut({
+    env,
+    params: { id: "post_deleted" },
+    request: new Request("https://example.com/api/admin/posts/post_deleted", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "should-not-change",
+        title: "Should not change",
+        summary: "Should not change",
+        bodyMarkdown: "# Nope",
+        status: "published",
+      }),
+    }),
+  });
+  assert.equal(deletedUpdate.status, 404);
+  assert.deepEqual(await deletedUpdate.json(), { ok: false, error: "not_found" });
+  assert.equal(state.posts.get("post_deleted").slug, "deleted-post");
+
+  const missingDelete = await onRequestPostDelete({
+    env,
+    params: { id: "missing" },
+  });
+  assert.equal(missingDelete.status, 404);
+  assert.deepEqual(await missingDelete.json(), { ok: false, error: "not_found" });
+
+  const deletedDelete = await onRequestPostDelete({
+    env,
+    params: { id: "post_deleted" },
+  });
+  assert.equal(deletedDelete.status, 404);
+  assert.deepEqual(await deletedDelete.json(), { ok: false, error: "not_found" });
+});
+
+test("post publish route remains a placeholder", async () => {
   const postPublish = await onRequestPostPublish();
   assert.equal(postPublish.status, 501);
   assert.deepEqual(await postPublish.json(), {
@@ -129,12 +513,6 @@ test("placeholder mutation routes return not implemented responses", async () =>
     message: "Post publish is not implemented yet.",
     publishState: "pending_deploy",
   });
-});
-
-test("placeholder read routes remain successful", async () => {
-  const postRead = await onRequestPostGet();
-  assert.equal(postRead.status, 200);
-  assert.deepEqual(await postRead.json(), { post: null });
 });
 
 test("cms_rate_limits migration enforces unique bucket and key pairs", () => {
