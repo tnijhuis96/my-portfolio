@@ -8,15 +8,9 @@ import {
 } from "../../_lib/auth.js";
 
 export async function onRequestPost(context) {
-  let body;
-  try {
-    body = await context.request.json();
-  } catch {
-    return json({ ok: false, error: "invalid_json" }, { status: 400 });
-  }
-
   const accessEmail = context.request.headers.get("cf-access-authenticated-user-email");
 
+  // Login is fail-closed: unlike logout, do not proceed if audit logging fails.
   await writeAuditEvent(context.env, {
     action: "login_attempt",
     actor_user_id: accessEmail,
@@ -28,6 +22,21 @@ export async function onRequestPost(context) {
   const blocked = await assertRateLimitAllowed(context.env, "login", "single-admin");
   if (blocked) {
     return blocked;
+  }
+
+  let body;
+  try {
+    body = await context.request.json();
+  } catch {
+    await writeAuditEvent(context.env, {
+      action: "login_failure",
+      actor_user_id: accessEmail,
+      target_type: "admin_session",
+      target_id: null,
+      metadata: { stage: "failure", reason: "invalid_json" },
+    });
+
+    return json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
 
   const passwordOk = await verifyPassword(context.env.CMS_PASSWORD_HASH, body.password);

@@ -438,7 +438,7 @@ test("login route records a failed audit outcome for invalid credentials", async
   );
 });
 
-test("login route returns a structured 400 for invalid JSON", async () => {
+test("login route audits and rate-limits invalid JSON requests", async () => {
   const { env, state } = createTestEnv();
   const response = await onRequestPost({
     env,
@@ -453,7 +453,14 @@ test("login route returns a structured 400 for invalid JSON", async () => {
 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
-  assert.equal(state.rateLimits.size, 0);
+  assert.equal(state.auditLog.length, 2);
+  assert.equal(state.auditLog[0].action, "login_attempt");
+  assert.equal(state.auditLog[1].action, "login_failure");
+  assert.deepEqual(
+    JSON.parse(state.auditLog[1].metadata_json),
+    { stage: "failure", reason: "invalid_json" },
+  );
+  assert.equal(state.rateLimits.get("login:single-admin").count, 1);
 });
 
 test("logout route deletes the stored session, logs the event, and clears the cookie", async () => {
