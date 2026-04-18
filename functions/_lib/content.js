@@ -86,6 +86,20 @@ export function isDuplicateSlugConstraint(error) {
   return /unique constraint failed:\s*cms_posts\.slug/i.test(String(error?.message ?? error ?? ""));
 }
 
+class PostValidationError extends Error {
+  constructor(fields) {
+    super("required_field");
+    this.name = "PostValidationError";
+    this.code = "required_field";
+    this.status = 422;
+    this.fields = fields;
+  }
+}
+
+export function isPostValidationError(error) {
+  return error?.code === "required_field" && error?.status === 422;
+}
+
 export function renderPostHtml(markdown) {
   const renderer = new marked.Renderer();
   const baseRenderer = new marked.Renderer();
@@ -112,8 +126,24 @@ export function normalizePostInput(input = {}) {
   };
 }
 
+export function validatePostInput(input) {
+  const fields = [];
+  if (!input.slug) {
+    fields.push("slug");
+  }
+  if (!input.title) {
+    fields.push("title");
+  }
+
+  if (fields.length > 0) {
+    throw new PostValidationError(fields);
+  }
+
+  return input;
+}
+
 export async function createPost(env, input) {
-  const post = normalizePostInput(input);
+  const post = validatePostInput(normalizePostInput(input));
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const sanitizedHtml = renderPostHtml(post.bodyMarkdown);

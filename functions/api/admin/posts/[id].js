@@ -2,8 +2,10 @@ import { json } from "../../../_lib/json.js";
 import { runOne } from "../../../_lib/db.js";
 import {
   isDuplicateSlugConstraint,
+  isPostValidationError,
   normalizePostInput,
   renderPostHtml,
+  validatePostInput,
 } from "../../../_lib/content.js";
 
 export async function onRequestGet(context) {
@@ -26,6 +28,16 @@ export async function onRequestPut(context) {
   }
 
   const body = normalizePostInput(requestBody);
+  try {
+    validatePostInput(body);
+  } catch (error) {
+    if (isPostValidationError(error)) {
+      return json({ ok: false, error: error.code, fields: error.fields }, { status: error.status });
+    }
+
+    throw error;
+  }
+
   const now = new Date().toISOString();
   const sanitizedHtml = renderPostHtml(body.bodyMarkdown);
 

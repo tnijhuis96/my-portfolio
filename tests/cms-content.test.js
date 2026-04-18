@@ -326,6 +326,28 @@ test("createPost persists normalized markdown content", async () => {
   assert.equal(state.posts.size, 1);
 });
 
+test("createPost rejects blank required fields after normalization", async () => {
+  const { env, state } = createContentTestEnv();
+
+  await assert.rejects(
+    () => createPost(env, {
+      slug: "   ",
+      title: " \n ",
+      summary: "Summary",
+      bodyMarkdown: "# Draft",
+      status: "draft",
+    }),
+    (error) => {
+      assert.equal(error.code, "required_field");
+      assert.equal(error.status, 422);
+      assert.deepEqual(error.fields, ["slug", "title"]);
+      return true;
+    },
+  );
+
+  assert.equal(state.posts.size, 0);
+});
+
 test("posts index routes create and list persisted posts", async () => {
   const { env, state } = createContentTestEnv();
 
@@ -627,6 +649,33 @@ test("post create returns invalid_json for malformed request bodies", async () =
   assert.equal(state.posts.size, 0);
 });
 
+test("post create returns required_field for blank normalized slug", async () => {
+  const { env, state } = createContentTestEnv();
+
+  const response = await onRequestPostsCreate({
+    env,
+    request: new Request("https://example.com/api/admin/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "   ",
+        title: "Hello",
+        summary: "Summary",
+        bodyMarkdown: "# Hello",
+        status: "draft",
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), {
+    ok: false,
+    error: "required_field",
+    fields: ["slug"],
+  });
+  assert.equal(state.posts.size, 0);
+});
+
 test("post update returns invalid_json for malformed request bodies", async () => {
   const { env, state } = createContentTestEnv();
   state.posts.set("post_1", {
@@ -654,6 +703,47 @@ test("post update returns invalid_json for malformed request bodies", async () =
 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
+  assert.equal(state.posts.get("post_1").title, "Hello world");
+});
+
+test("post update returns required_field for blank normalized title", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  const response = await onRequestPostPut({
+    env,
+    params: { id: "post_1" },
+    request: new Request("https://example.com/api/admin/posts/post_1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "updated-post",
+        title: "   ",
+        summary: "Updated summary",
+        bodyMarkdown: "# Updated",
+        status: "draft",
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), {
+    ok: false,
+    error: "required_field",
+    fields: ["title"],
+  });
+  assert.equal(state.posts.get("post_1").slug, "hello-world");
   assert.equal(state.posts.get("post_1").title, "Hello world");
 });
 
