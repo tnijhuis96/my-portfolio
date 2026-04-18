@@ -183,6 +183,25 @@ export async function onRequestGet() {
         return post?.body_markdown ?? post?.bodyMarkdown ?? "";
       }
 
+      function getSessionCsrfToken() {
+        return state.session?.csrfToken || "";
+      }
+
+      function getRequestHeaders(headers = {}, options = {}) {
+        const nextHeaders = {
+          ...headers
+        };
+
+        if (options.csrf) {
+          const csrfToken = getSessionCsrfToken();
+          if (csrfToken) {
+            nextHeaders["x-csrf-token"] = csrfToken;
+          }
+        }
+
+        return nextHeaders;
+      }
+
       function setRevisionsMessage(message) {
         revisionsList.replaceChildren();
         revisionsList.textContent = message;
@@ -190,9 +209,17 @@ export async function onRequestGet() {
 
       function updateMutationControls() {
         const disabled = state.mutationPending;
+        newPostButton.disabled = disabled;
         savePostButton.disabled = disabled;
         deletePostButton.disabled = disabled;
         publishButton.disabled = disabled;
+
+        const postButtons = Array.from(postList.children || []);
+        postButtons.forEach((button) => {
+          if (button) {
+            button.disabled = disabled;
+          }
+        });
 
         const revisionItems = Array.from(revisionsList.children || []);
         revisionItems.forEach((item) => {
@@ -211,6 +238,18 @@ export async function onRequestGet() {
       function beginSelectionChange() {
         state.selectionVersion += 1;
         return state.selectionVersion;
+      }
+
+      function captureSelectionSnapshot() {
+        return {
+          activePostId: state.activePostId,
+          selectionVersion: state.selectionVersion
+        };
+      }
+
+      function matchesSelectionSnapshot(snapshot) {
+        return snapshot.selectionVersion === state.selectionVersion
+          && snapshot.activePostId === state.activePostId;
       }
 
       function getRevisionLabel(revision) {
@@ -283,6 +322,7 @@ export async function onRequestGet() {
         });
 
         postList.replaceChildren(...buttons);
+        updateMutationControls();
       }
 
       async function readJsonBody(response) {
@@ -381,6 +421,7 @@ export async function onRequestGet() {
         const url = isUpdate
           ? window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(state.activePostId)
           : window.CMS_ENDPOINTS.posts;
+        const selectionSnapshot = captureSelectionSnapshot();
 
         setMutationPending(true);
         editorStatus.textContent = "Saving draft...";
@@ -389,10 +430,10 @@ export async function onRequestGet() {
           const response = await fetch(url, {
             method,
             credentials: "same-origin",
-            headers: {
+            headers: getRequestHeaders({
               "content-type": "application/json",
               accept: "application/json"
-            },
+            }, { csrf: true }),
             body: JSON.stringify(payload)
           });
           const result = await readJsonBody(response);
@@ -400,15 +441,25 @@ export async function onRequestGet() {
           if (!response.ok) {
             if (result?.error === "not_found") {
               await loadPosts();
+              if (!matchesSelectionSnapshot(selectionSnapshot)) {
+                return;
+              }
               resetEditor();
             }
 
+            if (!matchesSelectionSnapshot(selectionSnapshot)) {
+              return;
+            }
             editorStatus.textContent = getEditorFailureMessage(result, "Unable to save this post right now.");
             return;
           }
 
-          const postId = isUpdate ? state.activePostId : result?.post?.id;
+          const postId = isUpdate ? selectionSnapshot.activePostId : result?.post?.id;
           await loadPosts();
+
+          if (!matchesSelectionSnapshot(selectionSnapshot)) {
+            return;
+          }
 
           if (postId) {
             await loadPost(postId, { statusMessage: "Draft saved." });
@@ -433,6 +484,7 @@ export async function onRequestGet() {
           return;
         }
 
+        const selectionSnapshot = captureSelectionSnapshot();
         setMutationPending(true);
         editorStatus.textContent = "Deleting post...";
 
@@ -440,26 +492,38 @@ export async function onRequestGet() {
           const response = await fetch(window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(state.activePostId), {
             method: "DELETE",
             credentials: "same-origin",
-            headers: {
+            headers: getRequestHeaders({
               accept: "application/json"
-            }
+            }, { csrf: true })
           });
           const result = await readJsonBody(response);
 
           if (!response.ok) {
             if (result?.error === "not_found") {
               await loadPosts();
+              if (!matchesSelectionSnapshot(selectionSnapshot)) {
+                return;
+              }
               resetEditor();
             }
 
+            if (!matchesSelectionSnapshot(selectionSnapshot)) {
+              return;
+            }
             editorStatus.textContent = getEditorFailureMessage(result, "Unable to delete this post right now.");
             return;
           }
 
-          resetEditor();
           await loadPosts();
+          if (!matchesSelectionSnapshot(selectionSnapshot)) {
+            return;
+          }
+          resetEditor();
           editorStatus.textContent = "Post deleted.";
         } catch {
+          if (!matchesSelectionSnapshot(selectionSnapshot)) {
+            return;
+          }
           editorStatus.textContent = "Unable to delete this post right now.";
         } finally {
           setMutationPending(false);
@@ -485,9 +549,9 @@ export async function onRequestGet() {
           const response = await fetch("/api/admin/revisions/" + encodeURIComponent(revisionId) + "/restore", {
             method: "POST",
             credentials: "same-origin",
-            headers: {
+            headers: getRequestHeaders({
               accept: "application/json"
-            }
+            }, { csrf: true })
           });
           const result = await readJsonBody(response);
 
@@ -535,9 +599,9 @@ export async function onRequestGet() {
           const response = await fetch(window.CMS_ENDPOINTS.posts + "/" + encodeURIComponent(activePostId) + "/publish", {
             method: "POST",
             credentials: "same-origin",
-            headers: {
+            headers: getRequestHeaders({
               accept: "application/json"
-            }
+            }, { csrf: true })
           });
           const result = await readJsonBody(response);
           const statusMessage = getPublishMessage(result);

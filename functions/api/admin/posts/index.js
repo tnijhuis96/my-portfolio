@@ -1,3 +1,4 @@
+import { requireSession } from "../../../_lib/auth.js";
 import { json } from "../../../_lib/json.js";
 import {
   createPost,
@@ -7,6 +8,11 @@ import {
 import { runAll } from "../../../_lib/db.js";
 
 export async function onRequestGet(context) {
+  const auth = await requireSession(context);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   const posts = await runAll(
     context.env,
     "SELECT id, slug, title, summary, status, published_at, deleted_at, updated_at FROM cms_posts WHERE deleted_at IS NULL ORDER BY updated_at DESC",
@@ -15,6 +21,11 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
+  const auth = await requireSession(context, { csrf: true });
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   let body;
   try {
     body = await context.request.json();

@@ -307,7 +307,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
       fetchCalls.push({ url, options });
 
       if (url === "/api/admin/session") {
-        return createJsonResponse({ authenticated: true });
+        return createJsonResponse({ authenticated: true, csrfToken: "csrf-123" });
       }
 
       if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
@@ -365,6 +365,7 @@ test("admin inline script wires post list, save, delete, and reset actions for t
 
   const saveRequest = fetchCalls.find(({ url, options }) => url === "/api/admin/posts/post-1" && options.method === "PUT");
   assert.ok(saveRequest, "save should update the active post");
+  assert.equal(saveRequest.options.headers["x-csrf-token"], "csrf-123");
   assert.deepEqual(JSON.parse(saveRequest.options.body), {
     slug: "hello-world",
     title: "Updated Title",
@@ -394,6 +395,8 @@ test("admin inline script wires post list, save, delete, and reset actions for t
     fetchCalls.some(({ url, options }) => url === "/api/admin/posts/post-1" && options.method === "DELETE"),
     "delete should remove the active post",
   );
+  const deleteRequest = fetchCalls.find(({ url, options }) => url === "/api/admin/posts/post-1" && options.method === "DELETE");
+  assert.equal(deleteRequest.options.headers["x-csrf-token"], "csrf-123");
   assert.equal(elements["post-list"].children.length, 0);
   assert.equal(elements.slug.value, "");
   assert.match(elements["editor-status"].textContent, /deleted/i);
@@ -461,7 +464,7 @@ test("admin inline script renders revision states and refreshes after restoring 
       fetchCalls.push({ url, options });
 
       if (url === "/api/admin/session") {
-        return createJsonResponse({ authenticated: true });
+        return createJsonResponse({ authenticated: true, csrfToken: "csrf-123" });
       }
 
       if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
@@ -550,11 +553,195 @@ test("admin inline script renders revision states and refreshes after restoring 
     fetchCalls.some(({ url, options }) => url === "/api/admin/revisions/revision-2/restore" && options.method === "POST"),
     "restore should post to the revision restore endpoint",
   );
+  const restoreRequest = fetchCalls.find(({ url, options }) => url === "/api/admin/revisions/revision-2/restore" && options.method === "POST");
+  assert.equal(restoreRequest.options.headers["x-csrf-token"], "csrf-123");
   assert.equal(elements.title.value, "Restored title");
   assert.equal(elements["post-list"].children[0].textContent, "Restored title");
   assert.match(elements["editor-status"].textContent, /revision restored/i);
   assert.equal(elements["revisions-list"].children.length, 1);
   assert.match(elements["revisions-list"].children[0].children[0].textContent, /Post-restore snapshot/);
+});
+
+test("admin inline script blocks selection changes during in-flight save and delete actions", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  const postsById = {
+    "post-1": {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      body_markdown: "# Hello",
+      status: "draft",
+      revisions: [],
+    },
+    "post-2": {
+      id: "post-2",
+      slug: "second-post",
+      title: "Second Post",
+      summary: "Second summary",
+      body_markdown: "# Second",
+      status: "draft",
+      revisions: [],
+    },
+  };
+  let listResponse = [
+    {
+      id: "post-1",
+      slug: "hello-world",
+      title: "Hello World",
+      summary: "First summary",
+      status: "draft",
+      updated_at: "2025-01-02T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+    {
+      id: "post-2",
+      slug: "second-post",
+      title: "Second Post",
+      summary: "Second summary",
+      status: "draft",
+      updated_at: "2025-01-01T00:00:00.000Z",
+      published_at: null,
+      deleted_at: null,
+    },
+  ];
+  let post2Loads = 0;
+  const saveDeferred = createDeferred();
+  const deleteDeferred = createDeferred();
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true, csrfToken: "csrf-123" });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ posts: listResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: postsById["post-1"] });
+      }
+
+      if (url === "/api/admin/posts/post-2" && (options.method ?? "GET") === "GET") {
+        post2Loads += 1;
+        return createJsonResponse({ post: postsById["post-2"] });
+      }
+
+      if (url === "/api/admin/posts/post-1" && options.method === "PUT") {
+        return saveDeferred.promise;
+      }
+
+      if (url === "/api/admin/posts/post-1" && options.method === "DELETE") {
+        return deleteDeferred.promise;
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  elements.title.value = "Updated Title";
+  const savePromise = elements["save-post"].click();
+  await flushMicrotasks(4);
+  assert.equal(elements["new-post"].disabled, true);
+  assert.equal(elements["post-list"].children[1].disabled, true);
+  await elements["post-list"].children[1].click();
+  await flushMicrotasks(10);
+
+  postsById["post-1"] = {
+    ...postsById["post-1"],
+    title: "Updated Title",
+  };
+  listResponse = [
+    { ...listResponse[0], title: "Updated Title" },
+    listResponse[1],
+  ];
+  saveDeferred.resolve(createJsonResponse({ ok: true }));
+  await savePromise;
+  await flushMicrotasks(10);
+
+  assert.equal(post2Loads, 0);
+  assert.equal(elements.title.value, "Updated Title");
+  assert.match(elements["editor-status"].textContent, /saved/i);
+
+  await elements["post-list"].children[1].click();
+  await flushMicrotasks(10);
+  assert.equal(post2Loads, 1);
+  assert.equal(elements.title.value, "Second Post");
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+
+  const deletePromise = elements["delete-post"].click();
+  await flushMicrotasks(4);
+  assert.equal(elements["new-post"].disabled, true);
+  assert.equal(elements["post-list"].children[1].disabled, true);
+  await elements["new-post"].click();
+  await flushMicrotasks(4);
+  await elements["post-list"].children[1].click();
+  await flushMicrotasks(10);
+
+  listResponse = [listResponse[1]];
+  deleteDeferred.resolve(createJsonResponse({ ok: true, deleted: true }));
+  await deletePromise;
+  await flushMicrotasks(10);
+
+  assert.equal(post2Loads, 1);
+  assert.equal(elements.title.value, "");
+  assert.match(elements["editor-status"].textContent, /deleted/i);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+  assert.equal(post2Loads, 2);
+  assert.equal(elements.title.value, "Second Post");
 });
 
 test("admin inline script shows inline failures for restore and publish outcomes", async () => {
@@ -650,7 +837,7 @@ test("admin inline script shows inline failures for restore and publish outcomes
       fetchCalls.push({ url, options });
 
       if (url === "/api/admin/session") {
-        return createJsonResponse({ authenticated: true });
+        return createJsonResponse({ authenticated: true, csrfToken: "csrf-123" });
       }
 
       if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
@@ -705,6 +892,8 @@ test("admin inline script shows inline failures for restore and publish outcomes
     fetchCalls.some(({ url, options }) => url === "/api/admin/posts/post-1/publish" && options.method === "POST"),
     "publish should post to the post publish endpoint",
   );
+  const publishRequest = fetchCalls.find(({ url, options }) => url === "/api/admin/posts/post-1/publish" && options.method === "POST");
+  assert.equal(publishRequest.options.headers["x-csrf-token"], "csrf-123");
   assert.match(elements["editor-status"].textContent, /publish accepted|deploy triggered/i);
 
   await elements["publish-post"].click();
@@ -716,7 +905,7 @@ test("admin inline script shows inline failures for restore and publish outcomes
   assert.match(elements["editor-status"].textContent, /rollback needs attention/i);
 });
 
-test("admin inline script keeps the latest selection during in-flight restore and publish actions", async () => {
+test("admin inline script blocks selection changes during in-flight restore and publish actions", async () => {
   const { onRequestGet } = await import("../functions/admin/index.js");
   const response = await onRequestGet();
   const html = await response.text();
@@ -851,23 +1040,37 @@ test("admin inline script keeps the latest selection during in-flight restore an
   const restorePromise = elements["revisions-list"].children[0].children[1].click();
   await flushMicrotasks(4);
 
+  assert.equal(elements["new-post"].disabled, true);
+  assert.equal(elements["post-list"].children[1].disabled, true);
   await elements["post-list"].children[1].click();
   await flushMicrotasks(10);
   restoreDeferred.resolve(createJsonResponse({ ok: true, restored: true }));
   await restorePromise;
   await flushMicrotasks(10);
 
+  assert.equal(elements.title.value, "Hello World");
+  assert.equal(elements["revisions-list"].children.length, 1);
+
+  await elements["post-list"].children[1].click();
+  await flushMicrotasks(10);
   assert.equal(elements.title.value, "Second Post");
   assert.equal(elements["revisions-list"].textContent, "No revisions yet.");
 
   const publishPromise = elements["publish-post"].click();
   await flushMicrotasks(4);
+  assert.equal(elements["new-post"].disabled, true);
+  assert.equal(elements["post-list"].children[0].disabled, true);
   await elements["post-list"].children[0].click();
   await flushMicrotasks(10);
   publishDeferred.resolve(createJsonResponse({ ok: true, publishState: "pending_deploy" }));
   await publishPromise;
   await flushMicrotasks(10);
 
+  assert.equal(elements.title.value, "Second Post");
+  assert.equal(elements["revisions-list"].textContent, "No revisions yet.");
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
   assert.equal(elements.title.value, "Hello World");
   assert.equal(elements["revisions-list"].children.length, 1);
 });
@@ -1113,14 +1316,19 @@ test("admin inline script serializes mutating actions while publish is pending",
   await flushMicrotasks(10);
 
   const restoreButton = elements["revisions-list"].children[0].children[1];
+  const postSelectionButton = elements["post-list"].children[0];
   const publishPromise = elements["publish-post"].click();
   await flushMicrotasks(4);
 
+  assert.equal(elements["new-post"].disabled, true);
+  assert.equal(postSelectionButton.disabled, true);
   assert.equal(elements["save-post"].disabled, true);
   assert.equal(elements["delete-post"].disabled, true);
   assert.equal(elements["publish-post"].disabled, true);
   assert.equal(restoreButton.disabled, true);
 
+  await elements["new-post"].click();
+  await postSelectionButton.click();
   await elements["save-post"].click();
   await elements["delete-post"].click();
   await restoreButton.click();
@@ -1151,6 +1359,8 @@ test("admin inline script serializes mutating actions while publish is pending",
   await publishPromise;
   await flushMicrotasks(10);
 
+  assert.equal(elements["new-post"].disabled, false);
+  assert.equal(elements["post-list"].children[0].disabled, false);
   assert.equal(elements["save-post"].disabled, false);
   assert.equal(elements["delete-post"].disabled, false);
   assert.equal(elements["publish-post"].disabled, false);

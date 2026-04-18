@@ -1,9 +1,16 @@
+import { requireSession } from "../../../../_lib/auth.js";
 import { json } from "../../../../_lib/json.js";
 import { writeAuditEvent } from "../../../../_lib/audit.js";
+import { writePostRevision } from "../../../../_lib/content.js";
 import { runOne } from "../../../../_lib/db.js";
 import { triggerDeploy } from "../../../../_lib/deploy.js";
 
 export async function onRequestPost(context, runtime = globalThis) {
+  const auth = await requireSession(context, { csrf: true });
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   const accessEmail = context.request?.headers.get("cf-access-authenticated-user-email");
   const writePostDecisionAudit = async (metadata) => {
     try {
@@ -86,6 +93,15 @@ export async function onRequestPost(context, runtime = globalThis) {
     outcome: "deploy_triggered",
     deployStatus: deploy.status,
   });
+
+  try {
+    await writePostRevision(context.env, {
+      ...post,
+      status: "published",
+      published_at: now,
+      updated_at: now,
+    }, now);
+  } catch {}
 
   return json(
     {

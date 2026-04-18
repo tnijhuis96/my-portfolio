@@ -1,3 +1,4 @@
+import { requireSession } from "../../../_lib/auth.js";
 import { json } from "../../../_lib/json.js";
 import { runAll, runOne } from "../../../_lib/db.js";
 import {
@@ -6,9 +7,15 @@ import {
   normalizePostInput,
   renderPostHtml,
   validatePostInput,
+  writePostRevision,
 } from "../../../_lib/content.js";
 
 export async function onRequestGet(context) {
+  const auth = await requireSession(context);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   const post = await runOne(
     context.env,
     "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
@@ -33,6 +40,11 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPut(context) {
+  const auth = await requireSession(context, { csrf: true });
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   let requestBody;
   try {
     requestBody = await context.request.json();
@@ -82,10 +94,26 @@ export async function onRequestPut(context) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
+  try {
+    await writePostRevision(context.env, {
+      id: context.params.id,
+      title: body.title,
+      summary: body.summary,
+      body_markdown: body.bodyMarkdown,
+      sanitized_html: sanitizedHtml,
+      status: body.status,
+    }, now);
+  } catch {}
+
   return json({ ok: true });
 }
 
 export async function onRequestDelete(context) {
+  const auth = await requireSession(context, { csrf: true });
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   const now = new Date().toISOString();
   const result = await context.env.CMS_DB.prepare(
     "UPDATE cms_posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",

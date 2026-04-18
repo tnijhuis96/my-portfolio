@@ -177,5 +177,39 @@ export async function createPost(env, input) {
     )
     .run();
 
+  try {
+    await writePostRevision(env, record, now);
+  } catch {}
+
   return normalizePostRecord(record);
+}
+
+export async function writePostRevision(env, post, createdAt = new Date().toISOString()) {
+  const record = {
+    id: crypto.randomUUID(),
+    post_id: post.id,
+    title: post.title,
+    summary: post.summary,
+    body_markdown: post.body_markdown ?? post.bodyMarkdown ?? "",
+    sanitized_html: post.sanitized_html ?? renderPostHtml(post.body_markdown ?? post.bodyMarkdown ?? ""),
+    status: post.status,
+    created_at: createdAt,
+  };
+
+  await env.CMS_DB.prepare(
+    "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  )
+    .bind(
+      record.id,
+      record.post_id,
+      record.title,
+      record.summary,
+      record.body_markdown,
+      record.sanitized_html,
+      record.status,
+      record.created_at,
+    )
+    .run();
+
+  return record;
 }

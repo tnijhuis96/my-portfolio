@@ -26,6 +26,7 @@ function createContentTestEnv(options = {}) {
     posts: new Map(),
     revisions: new Map(),
     auditLog: [],
+    sessions: new Map(),
   };
 
   function findPostBySlug(slug) {
@@ -59,6 +60,11 @@ function createContentTestEnv(options = {}) {
         if (normalizedQuery === "SELECT * FROM cms_post_revisions WHERE id = ?") {
           const [id] = bindings;
           return state.revisions.get(id) ?? null;
+        }
+
+        if (normalizedQuery === "SELECT id, user_id, csrf_token, expires_at FROM cms_sessions WHERE id = ?") {
+          const [id] = bindings;
+          return state.sessions.get(id) ?? null;
         }
 
         throw new Error(`Unsupported first() query: ${normalizedQuery}`);
@@ -257,6 +263,24 @@ function createContentTestEnv(options = {}) {
           return { success: true, meta: { changes: 1 } };
         }
 
+        if (
+          normalizedQuery
+          === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        ) {
+          const [id, postId, title, summary, bodyMarkdown, sanitizedHtml, status, createdAt] = bindings;
+          state.revisions.set(id, {
+            id,
+            post_id: postId,
+            title,
+            summary,
+            body_markdown: bodyMarkdown,
+            sanitized_html: sanitizedHtml,
+            status,
+            created_at: createdAt,
+          });
+          return { success: true, meta: { changes: 1 } };
+        }
+
         throw new Error(`Unsupported run() query: ${normalizedQuery}`);
       },
     };
@@ -271,6 +295,38 @@ function createContentTestEnv(options = {}) {
       },
     },
     state,
+  };
+}
+
+const CMS_TEST_SESSION_ID = "session_123";
+const CMS_TEST_CSRF_TOKEN = "csrf_123";
+
+function seedCmsSession(state, overrides = {}) {
+  const session = {
+    id: CMS_TEST_SESSION_ID,
+    user_id: "admin@example.com",
+    csrf_token: CMS_TEST_CSRF_TOKEN,
+    expires_at: "2999-01-01T08:00:00.000Z",
+    ...overrides,
+  };
+  state.sessions.set(session.id, session);
+  return session;
+}
+
+function withCmsSession(context, options = {}) {
+  const method = options.method ?? context.method ?? context.request?.method ?? "GET";
+  const csrfRequired = options.csrf ?? !["GET", "HEAD"].includes(String(method).toUpperCase());
+  const headers = new Headers(context.request?.headers ?? {});
+  headers.set("cookie", `cms_session=${options.sessionId ?? CMS_TEST_SESSION_ID}`);
+  if (csrfRequired) {
+    headers.set("x-csrf-token", options.csrfToken ?? CMS_TEST_CSRF_TOKEN);
+  }
+
+  return {
+    ...context,
+    request: context.request
+      ? new Request(context.request, { headers })
+      : new Request(options.url ?? context.url ?? "https://example.com/api/admin/test", { method, headers }),
   };
 }
 
@@ -432,10 +488,362 @@ test("createPost rejects blank required fields after normalization", async () =>
   assert.equal(state.posts.size, 0);
 });
 
+test("admin content routes reject unauthenticated requests and invalid csrf tokens", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+  state.revisions.set("revision_1", {
+    id: "revision_1",
+    post_id: "post_1",
+    title: "Revision title",
+    summary: "Revision summary",
+    body_markdown: "# Revision",
+    sanitized_html: "<h1>Revision</h1>",
+    status: "draft",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const unauthenticatedResponses = await Promise.all([
+    onRequestPostsGet({ env, request: new Request("https://example.com/api/admin/posts") }),
+    onRequestPostGet({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1"),
+    }),
+    onRequestPostsCreate({
+      env,
+      request: new Request("https://example.com/api/admin/posts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: "new-post",
+          title: "New post",
+          summary: "Summary",
+          bodyMarkdown: "# Post",
+          status: "draft",
+        }),
+      }),
+    }),
+    onRequestPostPut({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: "hello-world",
+          title: "Updated",
+          summary: "Summary",
+          bodyMarkdown: "# Updated",
+          status: "draft",
+        }),
+      }),
+    }),
+    onRequestPostDelete({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1", { method: "DELETE" }),
+    }),
+    onRequestPostPublish({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", { method: "POST" }),
+    }),
+    onRequestRestoreRevision({
+      env,
+      params: { id: "revision_1" },
+      request: new Request("https://example.com/api/admin/revisions/revision_1/restore", { method: "POST" }),
+    }),
+  ]);
+
+  for (const response of unauthenticatedResponses) {
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { ok: false, error: "unauthenticated" });
+  }
+
+  seedCmsSession(state);
+
+  const invalidCsrfResponses = await Promise.all([
+    onRequestPostsCreate(withCmsSession({
+      env,
+      request: new Request("https://example.com/api/admin/posts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: "new-post",
+          title: "New post",
+          summary: "Summary",
+          bodyMarkdown: "# Post",
+          status: "draft",
+        }),
+      }),
+    }, { csrfToken: "wrong-token" })),
+    onRequestPostPut(withCmsSession({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: "hello-world",
+          title: "Updated",
+          summary: "Summary",
+          bodyMarkdown: "# Updated",
+          status: "draft",
+        }),
+      }),
+    }, { csrfToken: "wrong-token" })),
+    onRequestPostDelete(withCmsSession({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1", { method: "DELETE" }),
+    }, { csrfToken: "wrong-token" })),
+    onRequestPostPublish(withCmsSession({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", { method: "POST" }),
+    }, { csrfToken: "wrong-token" })),
+    onRequestRestoreRevision(withCmsSession({
+      env,
+      params: { id: "revision_1" },
+      request: new Request("https://example.com/api/admin/revisions/revision_1/restore", { method: "POST" }),
+    }, { csrfToken: "wrong-token" })),
+  ]);
+
+  for (const response of invalidCsrfResponses) {
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { ok: false, error: "invalid_csrf" });
+  }
+});
+
+test("real cms create update publish and restore flows persist revision history", async () => {
+  const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const createResponse = await onRequestPostsCreate(withCmsSession({
+    env,
+    request: new Request("https://example.com/api/admin/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "hello-world",
+        title: "Hello world",
+        summary: "Summary",
+        bodyMarkdown: "# Hello world",
+        status: "draft",
+      }),
+    }),
+  }));
+  assert.equal(createResponse.status, 201);
+  const created = await createResponse.json();
+  assert.equal(state.revisions.size, 1);
+  const createdRevision = [...state.revisions.values()].find((revision) => revision.post_id === created.post.id);
+  assert.equal(createdRevision?.title, "Hello world");
+  assert.equal(createdRevision?.status, "draft");
+
+  const updateResponse = await onRequestPostPut(withCmsSession({
+    env,
+    params: { id: created.post.id },
+    request: new Request(`https://example.com/api/admin/posts/${created.post.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "hello-world",
+        title: "Updated title",
+        summary: "Updated summary",
+        bodyMarkdown: "# Updated",
+        status: "draft",
+      }),
+    }),
+  }));
+  assert.equal(updateResponse.status, 200);
+  assert.equal(state.revisions.size, 2);
+  assert.ok(
+    [...state.revisions.values()].some((revision) => revision.post_id === created.post.id && revision.title === "Updated title"),
+  );
+
+  const publishResponse = await onRequestPostPublish(
+    withCmsSession({
+      env,
+      params: { id: created.post.id },
+      request: new Request(`https://example.com/api/admin/posts/${created.post.id}/publish`, {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+    }),
+    {
+      async fetch() {
+        return { ok: true, status: 201 };
+      },
+    },
+  );
+  assert.equal(publishResponse.status, 200);
+  assert.equal(state.revisions.size, 3);
+  assert.ok(
+    [...state.revisions.values()].some((revision) => revision.post_id === created.post.id && revision.status === "published"),
+  );
+
+  const restoreTarget = createdRevision.id;
+  const restoreResponse = await onRequestRestoreRevision(withCmsSession({
+    env,
+    params: { id: restoreTarget },
+    request: new Request(`https://example.com/api/admin/revisions/${restoreTarget}/restore`, {
+      method: "POST",
+    }),
+  }));
+  assert.equal(restoreResponse.status, 200);
+  assert.equal(state.revisions.size, 4);
+  assert.ok(
+    [...state.revisions.values()].some((revision) => revision.post_id === created.post.id && revision.title === "Hello world"),
+  );
+});
+
+test("post update, publish, and restore do not fail after the main mutation when revision snapshot writes fail", async () => {
+  const revisionInsertError = new Error("revision insert failed");
+  const { env, state } = createContentTestEnv({
+    async onRun({ normalizedQuery }) {
+      if (
+        normalizedQuery
+        === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ) {
+        throw revisionInsertError;
+      }
+    },
+  });
+  seedCmsSession(state, { user_id: "editor@example.com" });
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+  state.revisions.set("revision_1", {
+    id: "revision_1",
+    post_id: "post_1",
+    title: "Restored title",
+    summary: "Restored summary",
+    body_markdown: "## Restored",
+    sanitized_html: "<h2>Restored</h2>",
+    status: "published",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const updateResponse = await onRequestPostPut(withCmsSession({
+    env,
+    params: { id: "post_1" },
+    request: new Request("https://example.com/api/admin/posts/post_1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "hello-world",
+        title: "Updated title",
+        summary: "Updated summary",
+        bodyMarkdown: "# Updated",
+        status: "draft",
+      }),
+    }),
+  }));
+  assert.equal(updateResponse.status, 200);
+  assert.deepEqual(await updateResponse.json(), { ok: true });
+  assert.equal(state.posts.get("post_1").title, "Updated title");
+
+  const publishResponse = await onRequestPostPublish(
+    withCmsSession({
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+    }),
+    {
+      async fetch() {
+        return { ok: true, status: 201 };
+      },
+    },
+  );
+  assert.equal(publishResponse.status, 200);
+  assert.deepEqual(await publishResponse.json(), {
+    ok: true,
+    publishState: "pending_deploy",
+  });
+  assert.equal(state.posts.get("post_1").status, "published");
+
+  const restoreResponse = await onRequestRestoreRevision(withCmsSession({
+    env,
+    params: { id: "revision_1" },
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/revision_1/restore",
+  }));
+  assert.equal(restoreResponse.status, 200);
+  assert.deepEqual(await restoreResponse.json(), { ok: true, restored: true });
+  assert.equal(state.posts.get("post_1").title, "Restored title");
+  assert.equal(state.revisions.size, 1);
+});
+
+test("post create does not fail after the main mutation when revision snapshot writes fail", async () => {
+  const revisionInsertError = new Error("revision insert failed");
+  const { env, state } = createContentTestEnv({
+    async onRun({ normalizedQuery }) {
+      if (
+        normalizedQuery
+        === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ) {
+        throw revisionInsertError;
+      }
+    },
+  });
+  seedCmsSession(state);
+
+  const response = await onRequestPostsCreate(withCmsSession({
+    env,
+    request: new Request("https://example.com/api/admin/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        slug: "hello-world",
+        title: "Hello world",
+        summary: "Summary",
+        bodyMarkdown: "# Hello world",
+        status: "draft",
+      }),
+    }),
+  }));
+
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  assert.equal(result.ok, true);
+  assert.equal(state.posts.size, 1);
+  assert.equal(state.revisions.size, 0);
+});
+
 test("posts index routes create and list persisted posts", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
 
-  const createResponse = await onRequestPostsCreate({
+  const createResponse = await onRequestPostsCreate(withCmsSession({
     env,
     request: new Request("https://example.com/api/admin/posts", {
       method: "POST",
@@ -448,7 +856,7 @@ test("posts index routes create and list persisted posts", async () => {
         status: " draft ",
       }),
     }),
-  });
+  }));
 
   assert.equal(createResponse.status, 201);
   const createdBody = await createResponse.json();
@@ -471,13 +879,17 @@ test("posts index routes create and list persisted posts", async () => {
     updated_at: "2025-01-01T00:00:00.000Z",
   });
 
-  const listResponse = await onRequestPostGet({
+  const listResponse = await onRequestPostGet(withCmsSession({
     env,
     params: { id: createdBody.post.id },
-  });
+    url: `https://example.com/api/admin/posts/${createdBody.post.id}`,
+  }));
   assert.equal(listResponse.status, 200);
 
-  const indexResponse = await onRequestPostsGet({ env });
+  const indexResponse = await onRequestPostsGet(withCmsSession({
+    env,
+    url: "https://example.com/api/admin/posts",
+  }));
   assert.equal(indexResponse.status, 200);
   assert.deepEqual(await indexResponse.json(), {
     posts: [
@@ -507,6 +919,7 @@ test("posts index routes create and list persisted posts", async () => {
 
 test("post routes read, update, delete, and restore revisions from D1 data", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -540,10 +953,11 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
     created_at: "2025-03-01T12:00:00.000Z",
   });
 
-  const readResponse = await onRequestPostGet({
+  const readResponse = await onRequestPostGet(withCmsSession({
     env,
     params: { id: "post_1" },
-  });
+    url: "https://example.com/api/admin/posts/post_1",
+  }));
   assert.equal(readResponse.status, 200);
   assert.deepEqual(await readResponse.json(), {
     post: {
@@ -567,7 +981,7 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
     },
   });
 
-  const updateResponse = await onRequestPostPut({
+  const updateResponse = await onRequestPostPut(withCmsSession({
     env,
     params: { id: "post_1" },
     request: new Request("https://example.com/api/admin/posts/post_1", {
@@ -581,17 +995,19 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
         status: " published ",
       }),
     }),
-  });
+  }));
   assert.equal(updateResponse.status, 200);
   assert.deepEqual(await updateResponse.json(), { ok: true });
   assert.equal(state.posts.get("post_1").slug, "updated-post");
   assert.equal(state.posts.get("post_1").status, "published");
   assert.match(state.posts.get("post_1").sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 
-  const deleteResponse = await onRequestPostDelete({
+  const deleteResponse = await onRequestPostDelete(withCmsSession({
     env,
     params: { id: "post_1" },
-  });
+    method: "DELETE",
+    url: "https://example.com/api/admin/posts/post_1",
+  }));
   assert.equal(deleteResponse.status, 200);
   assert.deepEqual(await deleteResponse.json(), { ok: true, deleted: true });
   assert.match(state.posts.get("post_1").deleted_at, /^\d{4}-\d{2}-\d{2}T/);
@@ -601,10 +1017,12 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
     deleted_at: null,
   });
 
-  const restoreResponse = await onRequestRestoreRevision({
+  const restoreResponse = await onRequestRestoreRevision(withCmsSession({
     env,
     params: { id: "revision_1" },
-  });
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/revision_1/restore",
+  }));
   assert.equal(restoreResponse.status, 200);
   assert.deepEqual(await restoreResponse.json(), { ok: true, restored: true });
   assert.equal(state.posts.get("post_1").title, "Restored title");
@@ -613,16 +1031,19 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
   assert.match(state.posts.get("post_1").sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(state.posts.get("post_1").sanitized_html, /<script>unsafe<\/script>/);
 
-  const missingResponse = await onRequestRestoreRevision({
+  const missingResponse = await onRequestRestoreRevision(withCmsSession({
     env,
     params: { id: "missing" },
-  });
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/missing/restore",
+  }));
   assert.equal(missingResponse.status, 404);
   assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
 });
 
 test("restore revision returns not_found when the target post no longer exists", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.revisions.set("revision_missing_post", {
     id: "revision_missing_post",
     post_id: "post_missing",
@@ -634,10 +1055,12 @@ test("restore revision returns not_found when the target post no longer exists",
     created_at: "2025-04-01T12:00:00.000Z",
   });
 
-  const response = await onRequestRestoreRevision({
+  const response = await onRequestRestoreRevision(withCmsSession({
     env,
     params: { id: "revision_missing_post" },
-  });
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/revision_missing_post/restore",
+  }));
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
@@ -646,6 +1069,7 @@ test("restore revision returns not_found when the target post no longer exists",
 
 test("restore revision returns not_found for soft-deleted target posts", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_deleted", {
     id: "post_deleted",
     slug: "deleted-post",
@@ -669,10 +1093,12 @@ test("restore revision returns not_found for soft-deleted target posts", async (
     created_at: "2025-04-01T12:00:00.000Z",
   });
 
-  const response = await onRequestRestoreRevision({
+  const response = await onRequestRestoreRevision(withCmsSession({
     env,
     params: { id: "revision_deleted_post" },
-  });
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/revision_deleted_post/restore",
+  }));
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
@@ -681,6 +1107,7 @@ test("restore revision returns not_found for soft-deleted target posts", async (
 
 test("restore revision clears published_at when restoring a draft revision", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -704,10 +1131,12 @@ test("restore revision clears published_at when restoring a draft revision", asy
     created_at: "2025-04-01T12:00:00.000Z",
   });
 
-  const response = await onRequestRestoreRevision({
+  const response = await onRequestRestoreRevision(withCmsSession({
     env,
     params: { id: "revision_draft" },
-  });
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/revision_draft/restore",
+  }));
 
   assert.equal(response.status, 200);
   assert.equal(state.posts.get("post_1").status, "draft");
@@ -716,6 +1145,7 @@ test("restore revision clears published_at when restoring a draft revision", asy
 
 test("restore revision refreshes published_at when restoring a published revision", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -739,10 +1169,12 @@ test("restore revision refreshes published_at when restoring a published revisio
     created_at: "2025-04-01T12:00:00.000Z",
   });
 
-  const response = await onRequestRestoreRevision({
+  const response = await onRequestRestoreRevision(withCmsSession({
     env,
     params: { id: "revision_published" },
-  });
+    method: "POST",
+    url: "https://example.com/api/admin/revisions/revision_published/restore",
+  }));
 
   assert.equal(response.status, 200);
   assert.equal(state.posts.get("post_1").status, "published");
@@ -752,6 +1184,7 @@ test("restore revision refreshes published_at when restoring a published revisio
 
 test("post update and delete return not_found for missing or soft-deleted posts", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_deleted", {
     id: "post_deleted",
     slug: "deleted-post",
@@ -765,7 +1198,7 @@ test("post update and delete return not_found for missing or soft-deleted posts"
     updated_at: "2025-04-03T12:00:00.000Z",
   });
 
-  const missingUpdate = await onRequestPostPut({
+  const missingUpdate = await onRequestPostPut(withCmsSession({
     env,
     params: { id: "missing" },
     request: new Request("https://example.com/api/admin/posts/missing", {
@@ -779,11 +1212,11 @@ test("post update and delete return not_found for missing or soft-deleted posts"
         status: "draft",
       }),
     }),
-  });
+  }));
   assert.equal(missingUpdate.status, 404);
   assert.deepEqual(await missingUpdate.json(), { ok: false, error: "not_found" });
 
-  const deletedUpdate = await onRequestPostPut({
+  const deletedUpdate = await onRequestPostPut(withCmsSession({
     env,
     params: { id: "post_deleted" },
     request: new Request("https://example.com/api/admin/posts/post_deleted", {
@@ -797,37 +1230,42 @@ test("post update and delete return not_found for missing or soft-deleted posts"
         status: "published",
       }),
     }),
-  });
+  }));
   assert.equal(deletedUpdate.status, 404);
   assert.deepEqual(await deletedUpdate.json(), { ok: false, error: "not_found" });
   assert.equal(state.posts.get("post_deleted").slug, "deleted-post");
 
-  const missingDelete = await onRequestPostDelete({
+  const missingDelete = await onRequestPostDelete(withCmsSession({
     env,
     params: { id: "missing" },
-  });
+    method: "DELETE",
+    url: "https://example.com/api/admin/posts/missing",
+  }));
   assert.equal(missingDelete.status, 404);
   assert.deepEqual(await missingDelete.json(), { ok: false, error: "not_found" });
 
-  const deletedDelete = await onRequestPostDelete({
+  const deletedDelete = await onRequestPostDelete(withCmsSession({
     env,
     params: { id: "post_deleted" },
-  });
+    method: "DELETE",
+    url: "https://example.com/api/admin/posts/post_deleted",
+  }));
   assert.equal(deletedDelete.status, 404);
   assert.deepEqual(await deletedDelete.json(), { ok: false, error: "not_found" });
 });
 
 test("post create returns invalid_json for malformed request bodies", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
 
-  const response = await onRequestPostsCreate({
+  const response = await onRequestPostsCreate(withCmsSession({
     env,
     request: new Request("https://example.com/api/admin/posts", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{",
     }),
-  });
+  }));
 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
@@ -836,8 +1274,9 @@ test("post create returns invalid_json for malformed request bodies", async () =
 
 test("post create returns required_field for blank normalized slug", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
 
-  const response = await onRequestPostsCreate({
+  const response = await onRequestPostsCreate(withCmsSession({
     env,
     request: new Request("https://example.com/api/admin/posts", {
       method: "POST",
@@ -850,7 +1289,7 @@ test("post create returns required_field for blank normalized slug", async () =>
         status: "draft",
       }),
     }),
-  });
+  }));
 
   assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
@@ -863,6 +1302,7 @@ test("post create returns required_field for blank normalized slug", async () =>
 
 test("post update returns invalid_json for malformed request bodies", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -876,7 +1316,7 @@ test("post update returns invalid_json for malformed request bodies", async () =
     updated_at: "2025-04-02T12:00:00.000Z",
   });
 
-  const response = await onRequestPostPut({
+  const response = await onRequestPostPut(withCmsSession({
     env,
     params: { id: "post_1" },
     request: new Request("https://example.com/api/admin/posts/post_1", {
@@ -884,7 +1324,7 @@ test("post update returns invalid_json for malformed request bodies", async () =
       headers: { "content-type": "application/json" },
       body: "{",
     }),
-  });
+  }));
 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
@@ -893,6 +1333,7 @@ test("post update returns invalid_json for malformed request bodies", async () =
 
 test("post update returns required_field for blank normalized title", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -906,7 +1347,7 @@ test("post update returns required_field for blank normalized title", async () =
     updated_at: "2025-04-02T12:00:00.000Z",
   });
 
-  const response = await onRequestPostPut({
+  const response = await onRequestPostPut(withCmsSession({
     env,
     params: { id: "post_1" },
     request: new Request("https://example.com/api/admin/posts/post_1", {
@@ -920,7 +1361,7 @@ test("post update returns required_field for blank normalized title", async () =
         status: "draft",
       }),
     }),
-  });
+  }));
 
   assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
@@ -934,6 +1375,7 @@ test("post update returns required_field for blank normalized title", async () =
 
 test("post create returns conflict for duplicate slugs", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_existing", {
     id: "post_existing",
     slug: "hello-world",
@@ -947,7 +1389,7 @@ test("post create returns conflict for duplicate slugs", async () => {
     updated_at: "2025-04-02T12:00:00.000Z",
   });
 
-  const response = await onRequestPostsCreate({
+  const response = await onRequestPostsCreate(withCmsSession({
     env,
     request: new Request("https://example.com/api/admin/posts", {
       method: "POST",
@@ -960,7 +1402,7 @@ test("post create returns conflict for duplicate slugs", async () => {
         status: "draft",
       }),
     }),
-  });
+  }));
 
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { ok: false, error: "duplicate_slug" });
@@ -969,6 +1411,7 @@ test("post create returns conflict for duplicate slugs", async () => {
 
 test("post update returns conflict for duplicate slugs", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -994,7 +1437,7 @@ test("post update returns conflict for duplicate slugs", async () => {
     updated_at: "2025-04-03T12:00:00.000Z",
   });
 
-  const response = await onRequestPostPut({
+  const response = await onRequestPostPut(withCmsSession({
     env,
     params: { id: "post_1" },
     request: new Request("https://example.com/api/admin/posts/post_1", {
@@ -1008,7 +1451,7 @@ test("post update returns conflict for duplicate slugs", async () => {
         status: "draft",
       }),
     }),
-  });
+  }));
 
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { ok: false, error: "duplicate_slug" });
@@ -1080,6 +1523,7 @@ test("triggerDeploy returns a clean failed result when the deploy hook URL is mi
 
 test("post publish route publishes the post, records audit, and triggers deploy", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1104,7 +1548,7 @@ test("post publish route publishes the post, records audit, and triggers deploy"
     },
   };
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1118,7 +1562,7 @@ test("post publish route publishes the post, records audit, and triggers deploy"
           throw new Error("route should use explicit runtime injection");
         },
       },
-    },
+    }),
     runtime,
   );
 
@@ -1160,6 +1604,7 @@ test("post publish route still returns success when the post-decision audit writ
       }
     },
   });
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1176,7 +1621,7 @@ test("post publish route still returns success when the post-decision audit writ
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1185,7 +1630,7 @@ test("post publish route still returns success when the post-decision audit writ
           "cf-access-authenticated-user-email": "editor@example.com",
         },
       }),
-    },
+    }),
     {
       async fetch() {
         return { ok: true, status: 201 };
@@ -1206,6 +1651,7 @@ test("post publish route still returns success when the post-decision audit writ
 
 test("post publish route returns deploy_failed when the deploy hook call fails", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1222,7 +1668,7 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1236,7 +1682,7 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
           throw new Error("route should use explicit runtime injection");
         },
       },
-    },
+    }),
     {
       async fetch() {
         return { ok: false, status: 503 };
@@ -1264,6 +1710,7 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
 
 test("post publish route rolls back and returns deploy_failed when the deploy hook fetch throws", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1280,7 +1727,7 @@ test("post publish route rolls back and returns deploy_failed when the deploy ho
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1294,7 +1741,7 @@ test("post publish route rolls back and returns deploy_failed when the deploy ho
           throw new Error("route should use explicit runtime injection");
         },
       },
-    },
+    }),
     {
       async fetch() {
         throw new Error("network down");
@@ -1332,6 +1779,7 @@ test("post publish route still returns deploy_failed when rollback-path audit wr
       }
     },
   });
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1348,7 +1796,7 @@ test("post publish route still returns deploy_failed when rollback-path audit wr
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1357,7 +1805,7 @@ test("post publish route still returns deploy_failed when rollback-path audit wr
           "cf-access-authenticated-user-email": "editor@example.com",
         },
       }),
-    },
+    }),
     {
       async fetch() {
         throw new Error("network down");
@@ -1388,6 +1836,7 @@ test("post publish route reports rollback failure and still returns deploy_faile
       }
     },
   });
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1404,7 +1853,7 @@ test("post publish route reports rollback failure and still returns deploy_faile
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1418,7 +1867,7 @@ test("post publish route reports rollback failure and still returns deploy_faile
           throw new Error("route should use explicit runtime injection");
         },
       },
-    },
+    }),
     {
       async fetch() {
         throw new Error("network down");
@@ -1457,6 +1906,7 @@ test("post publish route reports rollback failure when rollback update is a no-o
       }
     },
   });
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1473,7 +1923,7 @@ test("post publish route reports rollback failure when rollback update is a no-o
   env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
 
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1487,7 +1937,7 @@ test("post publish route reports rollback failure when rollback update is a no-o
           throw new Error("route should use explicit runtime injection");
         },
       },
-    },
+    }),
     {
       async fetch() {
         throw new Error("network down");
@@ -1516,6 +1966,7 @@ test("post publish route reports rollback failure when rollback update is a no-o
 
 test("post publish route returns not_found when the publish update races with a soft-delete", async () => {
   const { env, state } = createContentTestEnv({ publishUpdateChanges: 0 });
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1540,7 +1991,7 @@ test("post publish route returns not_found when the publish update races with a 
   };
 
   const response = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
       request: new Request("https://example.com/api/admin/posts/post_1/publish", {
@@ -1549,7 +2000,7 @@ test("post publish route returns not_found when the publish update races with a 
           "cf-access-authenticated-user-email": "editor@example.com",
         },
       }),
-    },
+    }),
     runtime,
   );
 
@@ -1573,6 +2024,7 @@ test("post publish route returns not_found when the publish update races with a 
 
 test("post publish route returns not_found for missing or soft-deleted posts without auditing or deploying", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_deleted", {
     id: "post_deleted",
     slug: "deleted-post",
@@ -1597,20 +2049,24 @@ test("post publish route returns not_found for missing or soft-deleted posts wit
   };
 
   const missingResponse = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_missing" },
-    },
+      method: "POST",
+      url: "https://example.com/api/admin/posts/post_missing/publish",
+    }),
     runtime,
   );
   assert.equal(missingResponse.status, 404);
   assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
 
   const deletedResponse = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_deleted" },
-    },
+      method: "POST",
+      url: "https://example.com/api/admin/posts/post_deleted/publish",
+    }),
     runtime,
   );
   assert.equal(deletedResponse.status, 404);
@@ -1622,6 +2078,7 @@ test("post publish route returns not_found for missing or soft-deleted posts wit
 
 test("post publish route returns deploy_failed when the deploy hook URL is missing", async () => {
   const { env, state } = createContentTestEnv();
+  seedCmsSession(state, { user_id: "editor@example.com" });
   state.posts.set("post_1", {
     id: "post_1",
     slug: "hello-world",
@@ -1639,10 +2096,12 @@ test("post publish route returns deploy_failed when the deploy hook URL is missi
 
   let fetchCalls = 0;
   const postPublish = await onRequestPostPublish(
-    {
+    withCmsSession({
       env,
       params: { id: "post_1" },
-    },
+      method: "POST",
+      url: "https://example.com/api/admin/posts/post_1/publish",
+    }),
     {
       async fetch() {
         fetchCalls += 1;

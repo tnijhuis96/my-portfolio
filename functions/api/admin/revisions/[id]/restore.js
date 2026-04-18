@@ -1,8 +1,14 @@
+import { requireSession } from "../../../../_lib/auth.js";
 import { json } from "../../../../_lib/json.js";
-import { renderPostHtml } from "../../../../_lib/content.js";
+import { renderPostHtml, writePostRevision } from "../../../../_lib/content.js";
 import { runOne } from "../../../../_lib/db.js";
 
 export async function onRequestPost(context) {
+  const auth = await requireSession(context, { csrf: true });
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   const revision = await runOne(
     context.env,
     "SELECT * FROM cms_post_revisions WHERE id = ?",
@@ -33,6 +39,19 @@ export async function onRequestPost(context) {
   if ((result?.meta?.changes ?? 0) < 1) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
+
+  try {
+    await writePostRevision(context.env, {
+      id: revision.post_id,
+      title: revision.title,
+      summary: revision.summary,
+      body_markdown: revision.body_markdown,
+      sanitized_html: renderPostHtml(revision.body_markdown),
+      status: revision.status,
+      published_at: publishedAt,
+      updated_at: updatedAt,
+    }, updatedAt);
+  } catch {}
 
   return json({ ok: true, restored: true });
 }
