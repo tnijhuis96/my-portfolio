@@ -4,6 +4,7 @@ import { runOne } from "../../../../_lib/db.js";
 import { triggerDeploy } from "../../../../_lib/deploy.js";
 
 export async function onRequestPost(context, runtime = globalThis) {
+  const accessEmail = context.request?.headers.get("cf-access-authenticated-user-email");
   const post = await runOne(
     context.env,
     "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
@@ -35,6 +36,7 @@ export async function onRequestPost(context, runtime = globalThis) {
 
     await writeAuditEvent(context.env, {
       action: "publish",
+      actor_user_id: accessEmail,
       target_type: "post",
       target_id: context.params.id,
       metadata: {
@@ -54,6 +56,7 @@ export async function onRequestPost(context, runtime = globalThis) {
 
   await writeAuditEvent(context.env, {
     action: "publish",
+    actor_user_id: accessEmail,
     target_type: "post",
     target_id: context.params.id,
     metadata: {

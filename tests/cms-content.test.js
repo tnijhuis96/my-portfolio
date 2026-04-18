@@ -910,6 +910,21 @@ test("triggerDeploy returns failed status details when the deploy hook fails", a
   assert.deepEqual(response, { ok: false, status: 500 });
 });
 
+test("triggerDeploy returns a clean failed result when the deploy hook fetch throws", async () => {
+  const response = await triggerDeploy(
+    {
+      PAGES_DEPLOY_HOOK_URL: "https://example.com/deploy",
+    },
+    {
+      async fetch() {
+        throw new Error("network down");
+      },
+    },
+  );
+
+  assert.deepEqual(response, { ok: false, status: 0 });
+});
+
 test("triggerDeploy returns a clean failed result when the deploy hook URL is missing", async () => {
   const response = await triggerDeploy({});
   assert.deepEqual(response, { ok: false, status: 0 });
@@ -944,6 +959,12 @@ test("post publish route publishes the post, records audit, and triggers deploy"
     {
       env,
       params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
       runtime: {
         async fetch() {
           throw new Error("route should use explicit runtime injection");
@@ -964,6 +985,7 @@ test("post publish route publishes the post, records audit, and triggers deploy"
   assert.equal(state.posts.get("post_1").updated_at, state.posts.get("post_1").published_at);
   assert.equal(state.auditLog.length, 1);
   assert.equal(state.auditLog[0].action, "publish");
+  assert.equal(state.auditLog[0].actor_user_id, "editor@example.com");
   assert.equal(state.auditLog[0].target_type, "post");
   assert.equal(state.auditLog[0].target_id, "post_1");
   assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
@@ -999,6 +1021,12 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
     {
       env,
       params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
       runtime: {
         async fetch() {
           throw new Error("route should use explicit runtime injection");
@@ -1023,9 +1051,68 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
   assert.equal(state.posts.get("post_1").updated_at, "2025-04-02T12:00:00.000Z");
   assert.equal(state.auditLog.length, 1);
   assert.equal(state.auditLog[0].action, "publish");
+  assert.equal(state.auditLog[0].actor_user_id, "editor@example.com");
   assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
     outcome: "deploy_failed",
     deployStatus: 503,
+  });
+});
+
+test("post publish route rolls back and returns deploy_failed when the deploy hook fetch throws", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const postPublish = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+      runtime: {
+        async fetch() {
+          throw new Error("route should use explicit runtime injection");
+        },
+      },
+    },
+    {
+      async fetch() {
+        throw new Error("network down");
+      },
+    },
+  );
+
+  assert.equal(postPublish.status, 502);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    publishState: "deploy_failed",
+  });
+
+  assert.equal(state.posts.get("post_1").status, "draft");
+  assert.equal(state.posts.get("post_1").published_at, null);
+  assert.equal(state.posts.get("post_1").updated_at, "2025-04-02T12:00:00.000Z");
+  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog[0].action, "publish");
+  assert.equal(state.auditLog[0].actor_user_id, "editor@example.com");
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
+    outcome: "deploy_failed",
+    deployStatus: 0,
   });
 });
 

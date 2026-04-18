@@ -19,14 +19,19 @@ export async function triggerDeploy(env, runtime = globalThis) {
     return { ok: false, status: 0 };
   }
 
-  const response = await runtime.fetch(deployHookUrl, {
-    method: "POST",
-    headers: buildDeployHeaders(env),
-    body: JSON.stringify({
-      event: "cms-publish",
-      timestamp: new Date().toISOString(),
-    }),
-  });
+  let response;
+  try {
+    response = await runtime.fetch(deployHookUrl, {
+      method: "POST",
+      headers: buildDeployHeaders(env),
+      body: JSON.stringify({
+        event: "cms-publish",
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch {
+    return { ok: false, status: 0 };
+  }
 
   if (!response.ok) {
     return { ok: false, status: response.status };
