@@ -158,3 +158,15 @@ test("buildDeployHeaders returns content type and optional deploy secret", () =>
   assert.equal(headersWithoutSecret["content-type"], "application/json");
   assert.equal("x-deploy-secret" in headersWithoutSecret, false);
 });
+
+test("buildDeployHeaders tolerates missing env and falls back to legacy secret", () => {
+  const headersWithoutEnv = buildDeployHeaders();
+  assert.equal(headersWithoutEnv["content-type"], "application/json");
+  assert.equal("x-deploy-secret" in headersWithoutEnv, false);
+
+  const headersWithLegacySecret = buildDeployHeaders({
+    DEPLOY_WEBHOOK_SECRET: "legacy-secret",
+  });
+  assert.equal(headersWithLegacySecret["content-type"], "application/json");
+  assert.equal(headersWithLegacySecret["x-deploy-secret"], "legacy-secret");
+});
