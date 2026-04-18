@@ -95,12 +95,15 @@ export async function onRequestPost(context, runtime = globalThis) {
   });
 
   try {
-    await writePostRevision(context.env, {
-      ...post,
-      status: "published",
-      published_at: now,
-      updated_at: now,
-    }, now);
+    const publishedPost = await runOne(
+      context.env,
+      "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
+      context.params.id,
+    );
+
+    if (publishedPost) {
+      await writePostRevision(context.env, publishedPost, now);
+    }
   } catch {}
 
   return json(
