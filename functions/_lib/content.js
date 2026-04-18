@@ -23,8 +23,33 @@ export function sanitizePostBody(markdown) {
   return escapeHtml(String(markdown ?? ""));
 }
 
+function sanitizeLinkHref(href) {
+  const value = String(href ?? "").trim();
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/[\u0000-\u001F\u007F\s]+/g, "").toLowerCase();
+  if (/^(javascript|data|vbscript):/.test(normalized)) {
+    return null;
+  }
+
+  return value;
+}
+
 export function renderPostHtml(markdown) {
-  return marked.parse(sanitizePostBody(markdown));
+  const renderer = new marked.Renderer();
+  const baseRenderer = new marked.Renderer();
+  renderer.link = (href, title, text) => {
+    const safeHref = sanitizeLinkHref(href);
+    if (!safeHref) {
+      return text;
+    }
+
+    return baseRenderer.link.call(renderer, safeHref, title, text);
+  };
+
+  return marked.parse(sanitizePostBody(markdown), { renderer });
 }
 
 export function normalizePostInput(input = {}) {

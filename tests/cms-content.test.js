@@ -246,6 +246,12 @@ test("renderPostHtml converts markdown into safe html", () => {
   assert.match(html, /<p>Paragraph &lt;script&gt;alert\(1\)&lt;\/script&gt;<\/p>/);
 });
 
+test("renderPostHtml neutralizes dangerous markdown links", () => {
+  const html = renderPostHtml("[x](javascript:alert(1)) and [ok](https://example.com)");
+  assert.doesNotMatch(html, /href="javascript:alert\(1\)"/);
+  assert.match(html, /<a[^>]*href="https:\/\/example\.com"[^>]*>ok<\/a>/);
+});
+
 test("normalizePostInput trims slug/title/summary/status", () => {
   const result = normalizePostInput({
     slug: " hello-world ",
@@ -435,6 +441,29 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
   });
   assert.equal(missingResponse.status, 404);
   assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
+});
+
+test("restore revision returns not_found when the target post no longer exists", async () => {
+  const { env, state } = createContentTestEnv();
+  state.revisions.set("revision_missing_post", {
+    id: "revision_missing_post",
+    post_id: "post_missing",
+    title: "Restored title",
+    summary: "Restored summary",
+    body_markdown: "## Restored",
+    sanitized_html: "<h2>unsafe</h2>",
+    status: "draft",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const response = await onRequestRestoreRevision({
+    env,
+    params: { id: "revision_missing_post" },
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
+  assert.equal(state.posts.size, 0);
 });
 
 test("post update and delete return not_found for missing or soft-deleted posts", async () => {

@@ -13,7 +13,7 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
-  await context.env.CMS_DB.prepare(
+  const result = await context.env.CMS_DB.prepare(
     "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ?",
   )
     .bind(
@@ -26,6 +26,10 @@ export async function onRequestPost(context) {
       revision.post_id,
     )
     .run();
+
+  if ((result?.meta?.changes ?? 0) < 1) {
+    return json({ ok: false, error: "not_found" }, { status: 404 });
+  }
 
   return json({ ok: true, restored: true });
 }
