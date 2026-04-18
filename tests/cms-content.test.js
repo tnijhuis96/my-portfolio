@@ -910,6 +910,11 @@ test("triggerDeploy returns failed status details when the deploy hook fails", a
   assert.deepEqual(response, { ok: false, status: 500 });
 });
 
+test("triggerDeploy returns a clean failed result when the deploy hook URL is missing", async () => {
+  const response = await triggerDeploy({});
+  assert.deepEqual(response, { ok: false, status: 0 });
+});
+
 test("post publish route publishes the post, records audit, and triggers deploy", async () => {
   const { env, state } = createContentTestEnv();
   state.posts.set("post_1", {
@@ -957,7 +962,10 @@ test("post publish route publishes the post, records audit, and triggers deploy"
   assert.equal(state.auditLog[0].action, "publish");
   assert.equal(state.auditLog[0].target_type, "post");
   assert.equal(state.auditLog[0].target_id, "post_1");
-  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), { stage: "attempted" });
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
+    outcome: "deploy_triggered",
+    deployStatus: 201,
+  });
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "https://example.com/deploy");
   assert.deepEqual(JSON.parse(requests[0].init.body), {
@@ -975,8 +983,8 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
     summary: "Summary",
     body_markdown: "# Hello world",
     sanitized_html: "<h1>Hello world</h1>",
-    status: "draft",
-    published_at: null,
+    status: "published",
+    published_at: "2025-04-01T12:00:00.000Z",
     deleted_at: null,
     updated_at: "2025-04-02T12:00:00.000Z",
   });
@@ -1002,9 +1010,60 @@ test("post publish route returns deploy_failed when the deploy hook call fails",
   }
 
   assert.equal(state.posts.get("post_1").status, "published");
-  assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.posts.get("post_1").published_at, "2025-04-01T12:00:00.000Z");
+  assert.equal(state.posts.get("post_1").updated_at, "2025-04-02T12:00:00.000Z");
   assert.equal(state.auditLog.length, 1);
   assert.equal(state.auditLog[0].action, "publish");
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
+    outcome: "deploy_failed",
+    deployStatus: 503,
+  });
+});
+
+test("post publish route returns not_found for missing or soft-deleted posts without auditing or deploying", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_deleted", {
+    id: "post_deleted",
+    slug: "deleted-post",
+    title: "Deleted post",
+    summary: "Summary",
+    body_markdown: "# Deleted",
+    sanitized_html: "<h1>Deleted</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: "2025-04-03T12:00:00.000Z",
+    updated_at: "2025-04-03T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return { ok: true, status: 201 };
+  };
+
+  try {
+    const missingResponse = await onRequestPostPublish({
+      env,
+      params: { id: "post_missing" },
+    });
+    assert.equal(missingResponse.status, 404);
+    assert.deepEqual(await missingResponse.json(), { ok: false, error: "not_found" });
+
+    const deletedResponse = await onRequestPostPublish({
+      env,
+      params: { id: "post_deleted" },
+    });
+    assert.equal(deletedResponse.status, 404);
+    assert.deepEqual(await deletedResponse.json(), { ok: false, error: "not_found" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(fetchCalls, 0);
+  assert.equal(state.auditLog.length, 0);
 });
 
 test("cms_rate_limits migration enforces unique bucket and key pairs", () => {

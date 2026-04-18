@@ -14,7 +14,12 @@ export function buildDeployHeaders(env) {
 }
 
 export async function triggerDeploy(env, runtime = globalThis) {
-  const response = await runtime.fetch(env.PAGES_DEPLOY_HOOK_URL, {
+  const deployHookUrl = env?.PAGES_DEPLOY_HOOK_URL?.trim();
+  if (!deployHookUrl) {
+    return { ok: false, status: 0 };
+  }
+
+  const response = await runtime.fetch(deployHookUrl, {
     method: "POST",
     headers: buildDeployHeaders(env),
     body: JSON.stringify({
