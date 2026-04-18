@@ -189,10 +189,6 @@ function createContentTestEnv(options = {}) {
           }
 
           if (status === "published" && options.publishUpdateChanges === 0) {
-            state.posts.set(id, {
-              ...existing,
-              deleted_at: updatedAt,
-            });
             return { success: true, meta: { changes: 0 } };
           }
 
@@ -1421,6 +1417,18 @@ test("post publish route returns not_found when the publish update races with a 
   assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
   assert.equal(fetchCalls, 0);
   assert.equal(state.auditLog.length, 0);
+  assert.deepEqual(state.posts.get("post_1"), {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
 });
 
 test("post publish route returns not_found for missing or soft-deleted posts without auditing or deploying", async () => {
