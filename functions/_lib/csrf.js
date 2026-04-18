@@ -1,6 +1,6 @@
 export function assertCsrf(request, session) {
   const header = request.headers.get("x-csrf-token");
-  if (!header || header !== session.csrf_token) {
+  if (!session || !header || header !== session.csrf_token) {
     throw new Error("Invalid CSRF token.");
   }
 }
