@@ -1004,6 +1004,62 @@ test("post publish route publishes the post, records audit, and triggers deploy"
   });
 });
 
+test("post publish route still returns success when the post-decision audit write fails", async () => {
+  const auditError = new Error("audit write failed");
+  const { env, state } = createContentTestEnv({
+    async onRun({ normalizedQuery }) {
+      if (
+        normalizedQuery
+        === "INSERT INTO cms_audit_log (id, actor_user_id, action, target_type, target_id, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ) {
+        throw auditError;
+      }
+    },
+  });
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const postPublish = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+    },
+    {
+      async fetch() {
+        return { ok: true, status: 201 };
+      },
+    },
+  );
+
+  assert.equal(postPublish.status, 200);
+  assert.deepEqual(await postPublish.json(), {
+    ok: true,
+    publishState: "pending_deploy",
+  });
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.posts.get("post_1").updated_at, state.posts.get("post_1").published_at);
+  assert.equal(state.auditLog.length, 0);
+});
+
 test("post publish route returns deploy_failed when the deploy hook call fails", async () => {
   const { env, state } = createContentTestEnv();
   state.posts.set("post_1", {
@@ -1118,6 +1174,62 @@ test("post publish route rolls back and returns deploy_failed when the deploy ho
     outcome: "deploy_failed",
     deployStatus: 0,
   });
+});
+
+test("post publish route still returns deploy_failed when rollback-path audit write fails", async () => {
+  const auditError = new Error("audit write failed");
+  const { env, state } = createContentTestEnv({
+    async onRun({ normalizedQuery }) {
+      if (
+        normalizedQuery
+        === "INSERT INTO cms_audit_log (id, actor_user_id, action, target_type, target_id, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ) {
+        throw auditError;
+      }
+    },
+  });
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const postPublish = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+    },
+    {
+      async fetch() {
+        throw new Error("network down");
+      },
+    },
+  );
+
+  assert.equal(postPublish.status, 502);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    publishState: "deploy_failed",
+  });
+  assert.equal(state.posts.get("post_1").status, "draft");
+  assert.equal(state.posts.get("post_1").published_at, null);
+  assert.equal(state.posts.get("post_1").updated_at, "2025-04-02T12:00:00.000Z");
+  assert.equal(state.auditLog.length, 0);
 });
 
 test("post publish route reports rollback failure and still returns deploy_failed when rollback update throws", async () => {

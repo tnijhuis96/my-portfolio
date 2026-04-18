@@ -5,6 +5,19 @@ import { triggerDeploy } from "../../../../_lib/deploy.js";
 
 export async function onRequestPost(context, runtime = globalThis) {
   const accessEmail = context.request?.headers.get("cf-access-authenticated-user-email");
+  const writePostDecisionAudit = async (metadata) => {
+    try {
+      await writeAuditEvent(context.env, {
+        action: "publish",
+        actor_user_id: accessEmail,
+        target_type: "post",
+        target_id: context.params.id,
+        metadata,
+      });
+    } catch {
+      // Once the deploy outcome is known, audit writes stay fail-open.
+    }
+  };
   const post = await runOne(
     context.env,
     "SELECT * FROM cms_posts WHERE id = ? AND deleted_at IS NULL",
@@ -42,21 +55,15 @@ export async function onRequestPost(context, runtime = globalThis) {
       rollbackErrorMessage = error instanceof Error ? error.message : String(error);
     }
 
-    await writeAuditEvent(context.env, {
-      action: "publish",
-      actor_user_id: accessEmail,
-      target_type: "post",
-      target_id: context.params.id,
-      metadata: {
-        outcome: "deploy_failed",
-        deployStatus: deploy.status,
-        ...(rollbackFailed
-          ? {
-              rollbackStatus: "failed",
-              rollbackError: rollbackErrorMessage,
-            }
-          : {}),
-      },
+    await writePostDecisionAudit({
+      outcome: "deploy_failed",
+      deployStatus: deploy.status,
+      ...(rollbackFailed
+        ? {
+            rollbackStatus: "failed",
+            rollbackError: rollbackErrorMessage,
+          }
+        : {}),
     });
 
     return json(
@@ -69,15 +76,9 @@ export async function onRequestPost(context, runtime = globalThis) {
     );
   }
 
-  await writeAuditEvent(context.env, {
-    action: "publish",
-    actor_user_id: accessEmail,
-    target_type: "post",
-    target_id: context.params.id,
-    metadata: {
-      outcome: "deploy_triggered",
-      deployStatus: deploy.status,
-    },
+  await writePostDecisionAudit({
+    outcome: "deploy_triggered",
+    deployStatus: deploy.status,
   });
 
   return json(
