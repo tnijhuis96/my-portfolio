@@ -14,7 +14,7 @@ export async function onRequestPost(context) {
   }
 
   const result = await context.env.CMS_DB.prepare(
-    "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ?",
+    "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
   )
     .bind(
       revision.title,

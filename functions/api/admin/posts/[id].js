@@ -14,7 +14,14 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPut(context) {
-  const body = normalizePostInput(await context.request.json());
+  let requestBody;
+  try {
+    requestBody = await context.request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
+
+  const body = normalizePostInput(requestBody);
   const now = new Date().toISOString();
   const sanitizedHtml = renderPostHtml(body.bodyMarkdown);
 

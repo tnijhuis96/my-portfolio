@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { marked } from "marked";
+import { normalizePostRecord } from "./db.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -48,8 +49,9 @@ export function renderPostHtml(markdown) {
 
     return baseRenderer.link.call(renderer, safeHref, title, text);
   };
+  renderer.html = (html) => escapeHtml(typeof html === "string" ? html : html.text);
 
-  return marked.parse(sanitizePostBody(markdown), { renderer });
+  return marked.parse(String(markdown ?? ""), { renderer });
 }
 
 export function normalizePostInput(input = {}) {
@@ -67,23 +69,35 @@ export async function createPost(env, input) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const sanitizedHtml = renderPostHtml(post.bodyMarkdown);
+  const record = {
+    id,
+    slug: post.slug,
+    title: post.title,
+    summary: post.summary,
+    body_markdown: post.bodyMarkdown,
+    sanitized_html: sanitizedHtml,
+    status: post.status,
+    published_at: null,
+    deleted_at: null,
+    updated_at: now,
+  };
 
   await env.CMS_DB.prepare(
     "INSERT INTO cms_posts (id, slug, title, summary, body_markdown, sanitized_html, status, published_at, deleted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
     .bind(
-      id,
-      post.slug,
-      post.title,
-      post.summary,
-      post.bodyMarkdown,
-      sanitizedHtml,
-      post.status,
-      null,
-      null,
-      now,
+      record.id,
+      record.slug,
+      record.title,
+      record.summary,
+      record.body_markdown,
+      record.sanitized_html,
+      record.status,
+      record.published_at,
+      record.deleted_at,
+      record.updated_at,
     )
     .run();
 
-  return { id, ...post, sanitized_html: sanitizedHtml, updated_at: now };
+  return normalizePostRecord(record);
 }

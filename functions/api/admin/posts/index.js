@@ -11,7 +11,13 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  const body = await context.request.json();
+  let body;
+  try {
+    body = await context.request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
+
   const post = await createPost(context.env, body);
   return json({ ok: true, post }, { status: 201 });
 }

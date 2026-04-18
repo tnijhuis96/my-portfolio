@@ -132,10 +132,13 @@ function createContentTestEnv() {
           return { success: true, meta: { changes: 1 } };
         }
 
-        if (normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ?") {
+        if (
+          normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ?"
+          || normalizedQuery === "UPDATE cms_posts SET title = ?, summary = ?, body_markdown = ?, sanitized_html = ?, status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        ) {
           const [title, summary, bodyMarkdown, sanitizedHtml, status, updatedAt, id] = bindings;
           const existing = state.posts.get(id);
-          if (!existing) {
+          if (!existing || (normalizedQuery.endsWith("AND deleted_at IS NULL") && existing.deleted_at !== null)) {
             return { success: true, meta: { changes: 0 } };
           }
 
@@ -252,6 +255,12 @@ test("renderPostHtml neutralizes dangerous markdown links", () => {
   assert.match(html, /<a[^>]*href="https:\/\/example\.com"[^>]*>ok<\/a>/);
 });
 
+test("renderPostHtml preserves markdown code escaping without double encoding", () => {
+  const html = renderPostHtml("Use `<script>` safely.");
+  assert.match(html, /<code>&lt;script&gt;<\/code>/);
+  assert.doesNotMatch(html, /<code>&amp;lt;script&amp;gt;<\/code>/);
+});
+
 test("normalizePostInput trims slug/title/summary/status", () => {
   const result = normalizePostInput({
     slug: " hello-world ",
@@ -281,8 +290,10 @@ test("createPost persists normalized markdown content", async () => {
   assert.equal(post.slug, "hello-world");
   assert.match(post.id, /^[0-9a-f-]{36}$/);
   assert.match(post.updated_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(post.body_markdown, "## Title\n\nParagraph <script>alert(1)</script>");
   assert.match(post.sanitized_html, /<h2[^>]*>Title<\/h2>/);
   assert.match(post.sanitized_html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.equal("bodyMarkdown" in post, false);
   assert.equal(state.posts.size, 1);
 });
 
@@ -308,6 +319,8 @@ test("posts index routes create and list persisted posts", async () => {
   const createdBody = await createResponse.json();
   assert.equal(createdBody.ok, true);
   assert.equal(createdBody.post.slug, "hello-world");
+  assert.equal(createdBody.post.body_markdown, "## Title\n\nParagraph");
+  assert.equal("bodyMarkdown" in createdBody.post, false);
   assert.equal(state.posts.size, 1);
 
   state.posts.set("post_older", {
@@ -466,6 +479,41 @@ test("restore revision returns not_found when the target post no longer exists",
   assert.equal(state.posts.size, 0);
 });
 
+test("restore revision returns not_found for soft-deleted target posts", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_deleted", {
+    id: "post_deleted",
+    slug: "deleted-post",
+    title: "Deleted",
+    summary: "Deleted summary",
+    body_markdown: "# Deleted",
+    sanitized_html: "<h1>Deleted</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: "2025-04-03T12:00:00.000Z",
+    updated_at: "2025-04-03T12:00:00.000Z",
+  });
+  state.revisions.set("revision_deleted_post", {
+    id: "revision_deleted_post",
+    post_id: "post_deleted",
+    title: "Restored title",
+    summary: "Restored summary",
+    body_markdown: "## Restored",
+    sanitized_html: "<h2>unsafe</h2>",
+    status: "published",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const response = await onRequestRestoreRevision({
+    env,
+    params: { id: "revision_deleted_post" },
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
+  assert.equal(state.posts.get("post_deleted").title, "Deleted");
+});
+
 test("post update and delete return not_found for missing or soft-deleted posts", async () => {
   const { env, state } = createContentTestEnv();
   state.posts.set("post_deleted", {
@@ -531,6 +579,53 @@ test("post update and delete return not_found for missing or soft-deleted posts"
   });
   assert.equal(deletedDelete.status, 404);
   assert.deepEqual(await deletedDelete.json(), { ok: false, error: "not_found" });
+});
+
+test("post create returns invalid_json for malformed request bodies", async () => {
+  const { env, state } = createContentTestEnv();
+
+  const response = await onRequestPostsCreate({
+    env,
+    request: new Request("https://example.com/api/admin/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
+  assert.equal(state.posts.size, 0);
+});
+
+test("post update returns invalid_json for malformed request bodies", async () => {
+  const { env, state } = createContentTestEnv();
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  const response = await onRequestPostPut({
+    env,
+    params: { id: "post_1" },
+    request: new Request("https://example.com/api/admin/posts/post_1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { ok: false, error: "invalid_json" });
+  assert.equal(state.posts.get("post_1").title, "Hello world");
 });
 
 test("post publish route remains a placeholder", async () => {
