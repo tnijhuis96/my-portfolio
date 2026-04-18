@@ -87,6 +87,7 @@ export function isDuplicateSlugConstraint(error) {
 }
 
 const REVISION_SNAPSHOT_WARNING_MESSAGE = "Revision history warning: latest snapshot could not be stored.";
+const LEGACY_REVISION_SLUG_WARNING_MESSAGE = "Revision history warning: this revision predates slug snapshots, so the current slug was preserved.";
 
 class PostValidationError extends Error {
   constructor(fields) {
@@ -194,11 +195,12 @@ export async function writePostRevision(env, post, createdAt = new Date().toISOS
     body_markdown: post.body_markdown ?? post.bodyMarkdown ?? "",
     sanitized_html: post.sanitized_html ?? renderPostHtml(post.body_markdown ?? post.bodyMarkdown ?? ""),
     status: post.status,
+    slug_source: "captured",
     created_at: createdAt,
   };
 
   await env.CMS_DB.prepare(
-    "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, slug_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
     .bind(
       record.id,
@@ -209,11 +211,27 @@ export async function writePostRevision(env, post, createdAt = new Date().toISOS
       record.body_markdown,
       record.sanitized_html,
       record.status,
+      record.slug_source,
       record.created_at,
     )
     .run();
 
   return record;
+}
+
+export function revisionSlugIsCaptured(revision) {
+  return revision?.slug_source === "captured";
+}
+
+export function getLegacyRevisionSlugWarning(revision, preservedSlug) {
+  return {
+    code: "revision_slug_legacy",
+    message: LEGACY_REVISION_SLUG_WARNING_MESSAGE,
+    revisionId: revision?.id ?? null,
+    slugSource: revision?.slug_source ?? "legacy_backfill",
+    preservedSlug,
+    requestedSlug: revision?.slug ?? "",
+  };
 }
 
 export function getRevisionSnapshotWarning(operation) {
@@ -237,13 +255,18 @@ export async function captureRevisionSnapshot(env, post, createdAt, options = {}
 }
 
 export function withRevisionWarning(payload, warning) {
-  if (!warning) {
+  return withRevisionWarnings(payload, warning ? [warning] : []);
+}
+
+export function withRevisionWarnings(payload, warnings = []) {
+  const nextWarnings = warnings.filter(Boolean);
+  if (!nextWarnings.length) {
     return payload;
   }
 
   return {
     ...payload,
     revisionState: "degraded",
-    warnings: [warning],
+    warnings: nextWarnings,
   };
 }

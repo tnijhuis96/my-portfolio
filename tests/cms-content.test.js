@@ -70,7 +70,10 @@ function createContentTestEnv(options = {}) {
         throw new Error(`Unsupported first() query: ${normalizedQuery}`);
       },
       async all() {
-        if (normalizedQuery === "SELECT id, status, created_at, title, summary FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC") {
+        if (
+          normalizedQuery === "SELECT id, status, created_at, title, summary FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC"
+          || normalizedQuery === "SELECT id, status, created_at, title, summary, slug_source FROM cms_post_revisions WHERE post_id = ? ORDER BY created_at DESC"
+        ) {
           const [postId] = bindings;
           return {
             results: [...state.revisions.values()]
@@ -82,6 +85,7 @@ function createContentTestEnv(options = {}) {
                 created_at: revision.created_at,
                 title: revision.title,
                 summary: revision.summary,
+                ...(normalizedQuery.includes("slug_source") ? { slug_source: revision.slug_source ?? "legacy_backfill" } : {}),
               })),
           };
         }
@@ -285,19 +289,27 @@ function createContentTestEnv(options = {}) {
 
         if (
           normalizedQuery
+          === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, slug_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          || normalizedQuery
           === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
           || normalizedQuery
           === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         ) {
-          const hasSlug = normalizedQuery.includes("(id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at)");
-          const [id, postId, slugOrTitle, titleOrSummary, summaryOrBody, bodyOrHtml, htmlOrStatus, statusOrCreated, createdAtOrUndefined] = bindings;
+          const hasSlug = normalizedQuery.includes("(id, post_id, slug, title, summary, body_markdown, sanitized_html, status");
+          const hasSlugSource = normalizedQuery.includes("status, slug_source, created_at");
+          const [id, postId, slugOrTitle, titleOrSummary, summaryOrBody, bodyOrHtml, htmlOrStatus, statusOrSlugSource, slugSourceOrCreatedAt, createdAtOrUndefined] = bindings;
           const slug = hasSlug ? slugOrTitle : null;
           const title = hasSlug ? titleOrSummary : slugOrTitle;
           const summary = hasSlug ? summaryOrBody : titleOrSummary;
           const bodyMarkdown = hasSlug ? bodyOrHtml : summaryOrBody;
           const sanitizedHtml = hasSlug ? htmlOrStatus : bodyOrHtml;
-          const status = hasSlug ? statusOrCreated : htmlOrStatus;
-          const createdAt = hasSlug ? createdAtOrUndefined : statusOrCreated;
+          const status = hasSlug ? statusOrSlugSource : htmlOrStatus;
+          const slugSource = hasSlug
+            ? (hasSlugSource ? slugSourceOrCreatedAt : "legacy_backfill")
+            : "legacy_backfill";
+          const createdAt = hasSlug
+            ? (hasSlugSource ? createdAtOrUndefined : slugSourceOrCreatedAt)
+            : statusOrSlugSource;
           state.revisions.set(id, {
             id,
             post_id: postId,
@@ -307,6 +319,7 @@ function createContentTestEnv(options = {}) {
             body_markdown: bodyMarkdown,
             sanitized_html: sanitizedHtml,
             status,
+            slug_source: slugSource,
             created_at: createdAt,
           });
           return { success: true, meta: { changes: 1 } };
@@ -536,6 +549,7 @@ test("admin content routes reject unauthenticated requests and invalid csrf toke
   state.revisions.set("revision_1", {
     id: "revision_1",
     post_id: "post_1",
+    slug_source: "captured",
     title: "Revision title",
     summary: "Revision summary",
     body_markdown: "# Revision",
@@ -681,6 +695,7 @@ test("real cms create update publish and restore flows persist revision history"
   assert.equal(state.revisions.size, 1);
   const createdRevision = [...state.revisions.values()].find((revision) => revision.post_id === created.post.id);
   assert.equal(createdRevision?.slug, "hello-world");
+  assert.equal(createdRevision?.slug_source, "captured");
   assert.equal(createdRevision?.title, "Hello world");
   assert.equal(createdRevision?.status, "draft");
 
@@ -705,6 +720,7 @@ test("real cms create update publish and restore flows persist revision history"
     [...state.revisions.values()].some((revision) =>
       revision.post_id === created.post.id
       && revision.slug === "updated-slug"
+      && revision.slug_source === "captured"
       && revision.title === "Updated title"
     ),
   );
@@ -733,6 +749,7 @@ test("real cms create update publish and restore flows persist revision history"
   );
   assert.ok(publishedRevision);
   assert.equal(publishedRevision.slug, "updated-slug");
+  assert.equal(publishedRevision.slug_source, "captured");
   assert.equal(publishedRevision.title, state.posts.get(created.post.id).title);
   assert.equal(publishedRevision.summary, state.posts.get(created.post.id).summary);
   assert.equal(publishedRevision.body_markdown, state.posts.get(created.post.id).body_markdown);
@@ -753,9 +770,72 @@ test("real cms create update publish and restore flows persist revision history"
     [...state.revisions.values()].some((revision) =>
       revision.post_id === created.post.id
       && revision.slug === "hello-world"
+      && revision.slug_source === "captured"
       && revision.title === "Hello world"
     ),
   );
+});
+
+test("restore preserves current slug and returns a warning for legacy revision slug backfills", async () => {
+  const { env, state } = createContentTestEnv();
+  seedCmsSession(state);
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "current-slug",
+    title: "Current title",
+    summary: "Current summary",
+    body_markdown: "# Current",
+    sanitized_html: "<h1>Current</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+  state.revisions.set("revision_legacy", {
+    id: "revision_legacy",
+    post_id: "post_1",
+    slug: "backfilled-slug",
+    slug_source: "legacy_backfill",
+    title: "Legacy title",
+    summary: "Legacy summary",
+    body_markdown: "# Legacy",
+    sanitized_html: "<h1>Legacy</h1>",
+    status: "published",
+    created_at: "2025-04-01T12:00:00.000Z",
+  });
+
+  const response = await onRequestRestoreRevision(withCmsSession({
+    env,
+    params: { id: "revision_legacy" },
+    request: new Request("https://example.com/api/admin/revisions/revision_legacy/restore", {
+      method: "POST",
+    }),
+  }));
+
+  assert.equal(response.status, 200);
+  assert.equal(state.posts.get("post_1").slug, "current-slug");
+  const result = await response.json();
+  assert.equal(result.ok, true);
+  assert.equal(result.restored, true);
+  assert.equal(result.revisionState, "degraded");
+  assert.deepEqual(result.warnings, [
+    {
+      code: "revision_slug_legacy",
+      message: "Revision history warning: this revision predates slug snapshots, so the current slug was preserved.",
+      revisionId: "revision_legacy",
+      slugSource: "legacy_backfill",
+      preservedSlug: "current-slug",
+      requestedSlug: "backfilled-slug",
+    },
+  ]);
+  const restoreSnapshot = [...state.revisions.values()].find((revision) =>
+    revision.id !== "revision_legacy" && revision.post_id === "post_1"
+  );
+  assert.ok(restoreSnapshot);
+  assert.equal(restoreSnapshot.slug, "current-slug");
+  assert.equal(restoreSnapshot.slug_source, "captured");
+  assert.equal(restoreSnapshot.title, "Legacy title");
+  assert.equal(restoreSnapshot.status, "published");
 });
 
 test("post update, publish, and restore return explicit revision warnings when snapshot writes fail", async () => {
@@ -764,6 +844,8 @@ test("post update, publish, and restore return explicit revision warnings when s
     async onRun({ normalizedQuery }) {
       if (
         normalizedQuery
+        === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, slug_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        || normalizedQuery
         === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         || normalizedQuery
         === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -789,6 +871,7 @@ test("post update, publish, and restore return explicit revision warnings when s
     id: "revision_1",
     post_id: "post_1",
     slug: "restored-slug",
+    slug_source: "captured",
     title: "Restored title",
     summary: "Restored summary",
     body_markdown: "## Restored",
@@ -889,6 +972,8 @@ test("post create returns an explicit revision warning when snapshot writes fail
     async onRun({ normalizedQuery }) {
       if (
         normalizedQuery
+        === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, slug_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        || normalizedQuery
         === "INSERT INTO cms_post_revisions (id, post_id, slug, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         || normalizedQuery
         === "INSERT INTO cms_post_revisions (id, post_id, title, summary, body_markdown, sanitized_html, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -1026,6 +1111,7 @@ test("post routes read, update, delete, and restore revisions from D1 data", asy
     id: "revision_1",
     post_id: "post_1",
     slug: "restored-slug",
+    slug_source: "captured",
     title: "Restored title",
     summary: "Restored summary",
     body_markdown: "## Restored\n\n<script>alert(1)</script>",
@@ -1216,6 +1302,7 @@ test("restore revision clears published_at when restoring a draft revision", asy
     id: "revision_draft",
     post_id: "post_1",
     slug: "draft-slug",
+    slug_source: "captured",
     title: "Draft title",
     summary: "Draft summary",
     body_markdown: "## Draft body",
@@ -1256,6 +1343,7 @@ test("restore revision refreshes published_at when restoring a published revisio
     id: "revision_published",
     post_id: "post_1",
     slug: "published-slug",
+    slug_source: "captured",
     title: "Published title",
     summary: "Published summary",
     body_markdown: "## Published body",
@@ -2243,6 +2331,18 @@ test("cms revision slug migration backfills safely when the source post is missi
   assert.match(
     migration,
     /COALESCE\s*\(\s*\(\s*SELECT cms_posts\.slug[\s\S]*AND cms_posts\.deleted_at IS NULL[\s\S]*\),\s*''\s*\)/,
+  );
+});
+
+test("cms revision slug source migration marks existing revisions as legacy backfills", () => {
+  const migration = readFileSync(
+    new URL("../migrations/0004_cms_revision_slug_source.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /ALTER TABLE cms_post_revisions ADD COLUMN slug_source TEXT NOT NULL DEFAULT 'legacy_backfill';/,
   );
 });
 

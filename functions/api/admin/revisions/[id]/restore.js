@@ -2,9 +2,11 @@ import { requireSession } from "../../../../_lib/auth.js";
 import { json } from "../../../../_lib/json.js";
 import {
   captureRevisionSnapshot,
+  getLegacyRevisionSlugWarning,
   isDuplicateSlugConstraint,
+  revisionSlugIsCaptured,
   renderPostHtml,
-  withRevisionWarning,
+  withRevisionWarnings,
 } from "../../../../_lib/content.js";
 import { runOne } from "../../../../_lib/db.js";
 
@@ -34,7 +36,12 @@ export async function onRequestPost(context) {
   }
 
   const updatedAt = new Date().toISOString();
-  const restoredSlug = revision.slug || post.slug;
+  const legacySlugWarning = revisionSlugIsCaptured(revision)
+    ? null
+    : getLegacyRevisionSlugWarning(revision, post.slug);
+  const restoredSlug = revisionSlugIsCaptured(revision) && revision.slug
+    ? revision.slug
+    : post.slug;
   const publishedAt = revision.status === "published" ? updatedAt : null;
   let result;
   try {
@@ -77,5 +84,8 @@ export async function onRequestPost(context) {
     updated_at: updatedAt,
   }, updatedAt, { operation: "restore" });
 
-  return json(withRevisionWarning({ ok: true, restored: true }, revisionWarning));
+  return json(withRevisionWarnings(
+    { ok: true, restored: true },
+    [legacySlugWarning, revisionWarning],
+  ));
 }

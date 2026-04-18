@@ -34,11 +34,18 @@
   - returns `{ "authenticated": false }` when the app session cookie is missing or expired
   - returns `{ "authenticated": true, "userId": "...", "csrfToken": "..." }` when the app session is valid
 - The response is `Cache-Control: no-store`.
+- If any authenticated content load or mutation later receives `401 unauthenticated` or `403 invalid_csrf`, the admin UI drops back to the login shell and shows `Session expired. Sign in again.`
 
 ### Content mutations
 - Save/create uses the existing posts routes and refreshes the editor with `Draft saved.` on success.
 - Delete uses the existing post delete route and refreshes the list with `Post deleted.` on success.
 - Restore reapplies the stored revision title, summary, markdown body, and status, regenerates sanitized HTML from the restored markdown, and resets `published_at` based on the restored status before reloading the editor with `Revision restored.`
+- Revisions created after slug-aware snapshots now store `slug_source: "captured"` and can fully restore the historical slug.
+- Legacy/backfilled revisions keep `slug_source: "legacy_backfill"`. Restore preserves the current post slug instead of silently applying an untrusted historical slug and returns a degraded warning object:
+  - `code: "revision_slug_legacy"`
+  - `slugSource: "legacy_backfill"`
+  - `preservedSlug` / `requestedSlug`
+- Snapshot write failures still return the existing degraded revision warnings, and the UI appends all warning messages after the main success/failure text.
 
 ### Publish outcomes
 - Successful publish returns `200` with `publishState: "pending_deploy"` and the UI shows `Publish accepted. Deploy triggered.`
@@ -60,4 +67,6 @@
 - Saving a draft creates or updates the post through the existing posts routes and the post list reloads.
 - Deleting a post soft-deletes it through the existing delete route and removes it from the list after reload.
 - Restoring a revision rewrites the current post from stored history and reloads the editor with the restored content.
+- Restoring a legacy/backfilled revision keeps the current slug and shows the degraded revision warning instead of silently changing the slug.
+- If the CMS session expires while loading posts, loading a post, saving, deleting, restoring, or publishing, the workspace closes and the login shell asks the operator to sign in again.
 - Publishing returns either `pending_deploy` or `deploy_failed`; investigate immediately if the UI reports rollback attention is needed.

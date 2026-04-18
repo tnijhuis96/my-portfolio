@@ -246,6 +246,73 @@ test("admin inline script keeps login shell active and shows retry-after lockout
   );
 });
 
+test("admin inline script returns to login when content loading gets an auth failure", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "post-list": createFakeElement(),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true, csrfToken: "csrf-123" });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ ok: false, error: "unauthenticated" }, { ok: false, status: 401 });
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  assert.equal(elements["login-shell"].hidden, false);
+  assert.equal(elements["workspace-shell"].hidden, true);
+  assert.equal(elements["post-list"].children.length, 0);
+  assert.equal(elements["editor-status"].textContent, "");
+  assert.match(elements["login-status"].textContent, /session expired.*sign in again/i);
+});
+
 test("admin inline script wires post list, save, delete, and reset actions for the editor", async () => {
   const { onRequestGet } = await import("../functions/admin/index.js");
   const response = await onRequestGet();
@@ -411,6 +478,111 @@ test("admin inline script wires post list, save, delete, and reset actions for t
   assert.equal(elements["post-list"].children.length, 0);
   assert.equal(elements.slug.value, "");
   assert.match(elements["editor-status"].textContent, /deleted/i);
+});
+
+test("admin inline script returns to login when a mutation gets an auth failure", async () => {
+  const { onRequestGet } = await import("../functions/admin/index.js");
+  const response = await onRequestGet();
+  const html = await response.text();
+  const script = extractInlineScript(html);
+
+  const elements = {
+    "login-shell": createFakeElement(),
+    "workspace-shell": createFakeElement({ hidden: true }),
+    "login-form": createFakeElement(),
+    "login-status": createFakeElement(),
+    "editor-status": createFakeElement(),
+    "post-list": createFakeElement(),
+    "new-post": createFakeElement({ tagName: "button" }),
+    "save-post": createFakeElement({ tagName: "button" }),
+    "delete-post": createFakeElement({ tagName: "button" }),
+    "publish-post": createFakeElement({ tagName: "button" }),
+    slug: createFakeElement({ value: "" }),
+    title: createFakeElement({ value: "" }),
+    summary: createFakeElement({ value: "" }),
+    bodyMarkdown: createFakeElement({ value: "" }),
+    password: createFakeElement({ value: "secret-password" }),
+    "revisions-list": createFakeElement({ textContent: "Select or create a post to view history." }),
+  };
+
+  let detailResponse = {
+    id: "post-1",
+    slug: "hello-world",
+    title: "Hello World",
+    summary: "First summary",
+    body_markdown: "# Hello",
+    status: "draft",
+    revisions: [],
+  };
+
+  const context = {
+    window: {},
+    document: {
+      getElementById(id) {
+        return elements[id] ?? null;
+      },
+      createElement(tagName) {
+        return createFakeElement({ tagName });
+      },
+    },
+    fetch: async (url, options = {}) => {
+      if (url === "/api/admin/session") {
+        return createJsonResponse({ authenticated: true, csrfToken: "csrf-123" });
+      }
+
+      if (url === "/api/admin/posts" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({
+          posts: [{
+            id: "post-1",
+            slug: "hello-world",
+            title: "Hello World",
+            summary: "First summary",
+            status: "draft",
+            updated_at: "2025-01-01T00:00:00.000Z",
+            published_at: null,
+            deleted_at: null,
+          }],
+        });
+      }
+
+      if (url === "/api/admin/posts/post-1" && (options.method ?? "GET") === "GET") {
+        return createJsonResponse({ post: detailResponse });
+      }
+
+      if (url === "/api/admin/posts/post-1" && options.method === "PUT") {
+        return createJsonResponse({ ok: false, error: "invalid_csrf" }, { ok: false, status: 403 });
+      }
+
+      throw new Error(`Unexpected fetch: ${url} ${options.method ?? "GET"}`);
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  };
+  context.window.window = context.window;
+  context.window.document = context.document;
+  context.window.fetch = context.fetch;
+  context.window.console = console;
+  context.window.setTimeout = setTimeout;
+  context.window.clearTimeout = clearTimeout;
+
+  vm.runInNewContext(script, context);
+  await flushMicrotasks(10);
+
+  await elements["post-list"].children[0].click();
+  await flushMicrotasks(10);
+  elements.title.value = "Updated Title";
+
+  await elements["save-post"].click();
+  await flushMicrotasks(10);
+
+  assert.equal(elements["login-shell"].hidden, false);
+  assert.equal(elements["workspace-shell"].hidden, true);
+  assert.equal(elements.slug.value, "");
+  assert.equal(elements.title.value, "");
+  assert.equal(elements["revisions-list"].textContent, "Select or create a post to view history.");
+  assert.equal(elements["editor-status"].textContent, "");
+  assert.match(elements["login-status"].textContent, /session expired.*sign in again/i);
 });
 
 test("admin inline script renders revision states and refreshes after restoring a revision", async () => {

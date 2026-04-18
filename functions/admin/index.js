@@ -81,6 +81,7 @@ export async function onRequestGet() {
 
       const EMPTY_REVISIONS_MESSAGE = "Select or create a post to view history.";
       const NO_REVISIONS_MESSAGE = "No revisions yet.";
+      const SESSION_EXPIRED_MESSAGE = "Session expired. Sign in again.";
       const loginShell = document.getElementById("login-shell");
       const workspaceShell = document.getElementById("workspace-shell");
       const loginForm = document.getElementById("login-form");
@@ -100,10 +101,13 @@ export async function onRequestGet() {
 
       function showLogin(message = "") {
         state.session = null;
+        state.posts = [];
+        resetEditor();
         loginShell.hidden = false;
         workspaceShell.hidden = true;
         loginStatus.textContent = message;
         editorStatus.textContent = "";
+        postList.replaceChildren();
       }
 
       function showWorkspace(message = "") {
@@ -352,6 +356,22 @@ export async function onRequestGet() {
         }
       }
 
+      function isAuthFailure(response, result) {
+        return response?.status === 401
+          || response?.status === 403
+          || result?.error === "unauthenticated"
+          || result?.error === "invalid_csrf";
+      }
+
+      function handleAuthFailure(response, result) {
+        if (!isAuthFailure(response, result)) {
+          return false;
+        }
+
+        showLogin(SESSION_EXPIRED_MESSAGE);
+        return true;
+      }
+
       async function loadPosts() {
         try {
           const response = await fetch(window.CMS_ENDPOINTS.posts, {
@@ -362,6 +382,10 @@ export async function onRequestGet() {
             }
           });
           const result = await readJsonBody(response);
+
+          if (handleAuthFailure(response, result)) {
+            return [];
+          }
 
           if (!response.ok) {
             editorStatus.textContent = "Unable to load posts right now.";
@@ -392,6 +416,10 @@ export async function onRequestGet() {
           const result = await readJsonBody(response);
 
           if (selectionVersion !== state.selectionVersion) {
+            return null;
+          }
+
+          if (handleAuthFailure(response, result)) {
             return null;
           }
 
@@ -451,6 +479,10 @@ export async function onRequestGet() {
             body: JSON.stringify(payload)
           });
           const result = await readJsonBody(response);
+
+          if (handleAuthFailure(response, result)) {
+            return;
+          }
 
           if (!response.ok) {
             if (result?.error === "not_found") {
@@ -516,6 +548,10 @@ export async function onRequestGet() {
           });
           const result = await readJsonBody(response);
 
+          if (handleAuthFailure(response, result)) {
+            return;
+          }
+
           if (!response.ok) {
             if (result?.error === "not_found") {
               await loadPosts();
@@ -573,6 +609,10 @@ export async function onRequestGet() {
           });
           const result = await readJsonBody(response);
 
+          if (handleAuthFailure(response, result)) {
+            return;
+          }
+
           if (!response.ok || !result?.ok) {
             if (selectionVersion !== state.selectionVersion || state.activePostId !== activePostId) {
               return;
@@ -626,6 +666,10 @@ export async function onRequestGet() {
           });
           const result = await readJsonBody(response);
           const statusMessage = appendOperatorWarnings(getPublishMessage(result), result);
+
+          if (handleAuthFailure(response, result)) {
+            return;
+          }
 
           if (!response.ok && result?.error === "not_found") {
             await loadPosts();
