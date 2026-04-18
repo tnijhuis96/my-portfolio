@@ -62,15 +62,15 @@ export async function onRequestGet() {
         </aside>
       </section>
 
-      <script>
-        window.CMS_ENDPOINTS = {
-          session: "/api/admin/session",
-          login: "/api/admin/login",
-          logout: "/api/admin/logout",
-          posts: "/api/admin/posts"
-        };
-      </script>
     </main>
+    <script>
+      window.CMS_ENDPOINTS = {
+        session: "/api/admin/session",
+        login: "/api/admin/login",
+        logout: "/api/admin/logout",
+        posts: "/api/admin/posts"
+      };
+    </script>
   </body>
 </html>`,
     {
