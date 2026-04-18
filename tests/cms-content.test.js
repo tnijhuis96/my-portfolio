@@ -21,7 +21,7 @@ import {
 } from "../functions/api/admin/posts/index.js";
 import { onRequestPost as onRequestRestoreRevision } from "../functions/api/admin/revisions/[id]/restore.js";
 
-function createContentTestEnv() {
+function createContentTestEnv(options = {}) {
   const state = {
     posts: new Map(),
     revisions: new Map(),
@@ -85,6 +85,10 @@ function createContentTestEnv() {
         throw new Error(`Unsupported all() query: ${normalizedQuery}`);
       },
       async run() {
+        if (typeof options.onRun === "function") {
+          await options.onRun({ normalizedQuery, bindings, state });
+        }
+
         if (normalizedQuery === "INSERT INTO cms_posts (id, slug, title, summary, body_markdown, sanitized_html, status, published_at, deleted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)") {
           const [id, slug, title, summary, bodyMarkdown, sanitizedHtml, status, publishedAt, deletedAt, updatedAt] = bindings;
           if (findPostBySlug(slug)) {
@@ -1113,6 +1117,76 @@ test("post publish route rolls back and returns deploy_failed when the deploy ho
   assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
     outcome: "deploy_failed",
     deployStatus: 0,
+  });
+});
+
+test("post publish route reports rollback failure and still returns deploy_failed when rollback update throws", async () => {
+  const rollbackError = new Error("rollback write failed");
+  const { env, state } = createContentTestEnv({
+    async onRun({ normalizedQuery, bindings }) {
+      if (
+        normalizedQuery === "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+        && bindings[0] === "draft"
+      ) {
+        throw rollbackError;
+      }
+    },
+  });
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  const postPublish = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+      runtime: {
+        async fetch() {
+          throw new Error("route should use explicit runtime injection");
+        },
+      },
+    },
+    {
+      async fetch() {
+        throw new Error("network down");
+      },
+    },
+  );
+
+  assert.equal(postPublish.status, 502);
+  assert.deepEqual(await postPublish.json(), {
+    ok: false,
+    publishState: "deploy_failed",
+    rollbackState: "failed",
+  });
+
+  assert.equal(state.posts.get("post_1").status, "published");
+  assert.match(state.posts.get("post_1").published_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.auditLog.length, 1);
+  assert.equal(state.auditLog[0].action, "publish");
+  assert.equal(state.auditLog[0].actor_user_id, "editor@example.com");
+  assert.deepEqual(JSON.parse(state.auditLog[0].metadata_json), {
+    outcome: "deploy_failed",
+    deployStatus: 0,
+    rollbackStatus: "failed",
+    rollbackError: "rollback write failed",
   });
 });
 

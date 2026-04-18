@@ -28,11 +28,19 @@ export async function onRequestPost(context, runtime = globalThis) {
   const deploy = await triggerDeploy(context.env, runtime);
 
   if (!deploy.ok) {
-    await context.env.CMS_DB.prepare(
-      "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-    )
-      .bind(post.status, post.published_at, post.updated_at, context.params.id)
-      .run();
+    let rollbackFailed = false;
+    let rollbackErrorMessage = null;
+
+    try {
+      await context.env.CMS_DB.prepare(
+        "UPDATE cms_posts SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+      )
+        .bind(post.status, post.published_at, post.updated_at, context.params.id)
+        .run();
+    } catch (error) {
+      rollbackFailed = true;
+      rollbackErrorMessage = error instanceof Error ? error.message : String(error);
+    }
 
     await writeAuditEvent(context.env, {
       action: "publish",
@@ -42,6 +50,12 @@ export async function onRequestPost(context, runtime = globalThis) {
       metadata: {
         outcome: "deploy_failed",
         deployStatus: deploy.status,
+        ...(rollbackFailed
+          ? {
+              rollbackStatus: "failed",
+              rollbackError: rollbackErrorMessage,
+            }
+          : {}),
       },
     });
 
@@ -49,6 +63,7 @@ export async function onRequestPost(context, runtime = globalThis) {
       {
         ok: false,
         publishState: "deploy_failed",
+        ...(rollbackFailed ? { rollbackState: "failed" } : {}),
       },
       { status: 502 },
     );
