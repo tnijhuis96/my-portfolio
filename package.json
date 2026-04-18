@@ -21,7 +21,7 @@
     "cms:hash-password": "node scripts/hash-cms-password.js",
     "cms:migrate": "wrangler d1 migrations apply CMS_DB --local",
     "cms:test": "node --test tests/cms-module-scope.test.cjs tests/cms-auth.test.js tests/cms-content.test.js tests/cms-route-guards.test.js tests/cms-admin-ui.test.cjs tests/cms-tooling.test.cjs",
-    "cms:verify": "npm run cms:test && wrangler d1 migrations apply CMS_DB --local",
+    "cms:verify": "npm run cms:test && wrangler d1 migrations apply CMS_DB --local && npm run build",
     "dev:new-site": "npm run dev --workspace apps/site",
     "dev:studio": "npm run dev --workspace apps/studio",
     "build:new-site": "npm run build --workspace apps/site",
