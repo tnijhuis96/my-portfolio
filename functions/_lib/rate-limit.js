@@ -31,6 +31,19 @@ function buildRateLimitResponse(expiresAt, now) {
   });
 }
 
+async function readRateLimitEntry(db, bucket, key) {
+  return db
+    .prepare(
+      "SELECT id, bucket, key, count, window_started_at, expires_at FROM cms_rate_limits WHERE bucket = ? AND key = ?",
+    )
+    .bind(bucket, key)
+    .first();
+}
+
+function getMutationChanges(result) {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 export async function assertRateLimitAllowed(env, bucket, key, options = {}) {
   const db = requireDatabase(env);
 
@@ -38,43 +51,87 @@ export async function assertRateLimitAllowed(env, bucket, key, options = {}) {
   const windowSeconds = options.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
   const limit = options.limit ?? DEFAULT_LIMIT;
   const expiresAt = addSeconds(now, windowSeconds);
-  const existing = await db
+
+  const insertResult = await db
     .prepare(
-      "SELECT id, bucket, key, count, window_started_at, expires_at FROM cms_rate_limits WHERE bucket = ? AND key = ?",
+      "INSERT INTO cms_rate_limits (id, bucket, key, count, window_started_at, expires_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(bucket, key) DO NOTHING",
     )
-    .bind(bucket, key)
-    .first();
-
-  if (!existing) {
-    await db
-      .prepare(
-        "INSERT INTO cms_rate_limits (id, bucket, key, count, window_started_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-      )
-      .bind(crypto.randomUUID(), bucket, key, 1, now, expiresAt)
-      .run();
-    return null;
-  }
-
-  if (existing.expires_at <= now) {
-    await db
-      .prepare(
-        "UPDATE cms_rate_limits SET count = ?, window_started_at = ?, expires_at = ? WHERE id = ?",
-      )
-      .bind(1, now, expiresAt, existing.id)
-      .run();
-    return null;
-  }
-
-  if (existing.count >= limit) {
-    return buildRateLimitResponse(existing.expires_at, now);
-  }
-
-  await db
-    .prepare(
-      "UPDATE cms_rate_limits SET count = ?, window_started_at = ?, expires_at = ? WHERE id = ?",
-    )
-    .bind(existing.count + 1, existing.window_started_at, existing.expires_at, existing.id)
+    .bind(crypto.randomUUID(), bucket, key, 1, now, expiresAt)
     .run();
 
-  return null;
+  if (getMutationChanges(insertResult) > 0) {
+    return null;
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const existing = await readRateLimitEntry(db, bucket, key);
+    if (!existing) {
+      throw new Error(`Failed to read rate limit row for ${bucket}:${key}`);
+    }
+
+    if (existing.expires_at <= now) {
+      const resetResult = await db
+        .prepare(
+          "UPDATE cms_rate_limits SET count = ?, window_started_at = ?, expires_at = ? WHERE bucket = ? AND key = ? AND expires_at <= ?",
+        )
+        .bind(1, now, expiresAt, bucket, key, now)
+        .run();
+
+      if (getMutationChanges(resetResult) > 0) {
+        return null;
+      }
+
+      continue;
+    }
+
+    if (existing.count >= limit) {
+      return buildRateLimitResponse(existing.expires_at, now);
+    }
+
+    const incrementResult = await db
+      .prepare(
+        "UPDATE cms_rate_limits SET count = count + 1 WHERE bucket = ? AND key = ? AND expires_at > ? AND count < ?",
+      )
+      .bind(bucket, key, now, limit)
+      .run();
+
+    if (getMutationChanges(incrementResult) > 0) {
+      return null;
+    }
+  }
+
+  const latest = await readRateLimitEntry(db, bucket, key);
+  if (!latest) {
+    throw new Error(`Failed to finalize rate limit row for ${bucket}:${key}`);
+  }
+
+  if (latest.expires_at <= now) {
+    const resetResult = await db
+      .prepare(
+        "UPDATE cms_rate_limits SET count = ?, window_started_at = ?, expires_at = ? WHERE bucket = ? AND key = ? AND expires_at <= ?",
+      )
+      .bind(1, now, expiresAt, bucket, key, now)
+      .run();
+
+    if (getMutationChanges(resetResult) > 0) {
+      return null;
+    }
+  }
+
+  if (latest.count >= limit) {
+    return buildRateLimitResponse(latest.expires_at, now);
+  }
+
+  const incrementResult = await db
+    .prepare(
+      "UPDATE cms_rate_limits SET count = count + 1 WHERE bucket = ? AND key = ? AND expires_at > ? AND count < ?",
+    )
+    .bind(bucket, key, now, limit)
+    .run();
+
+  if (getMutationChanges(incrementResult) > 0) {
+    return null;
+  }
+
+  return buildRateLimitResponse(latest.expires_at, now);
 }

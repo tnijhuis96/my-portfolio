@@ -9,5 +9,9 @@ export async function onRequestPost(context) {
     metadata: { ok: true },
   });
 
-  return json({ ok: true });
+  return json({ ok: true }, {
+    headers: {
+      "cache-control": "no-store",
+    },
+  });
 }
