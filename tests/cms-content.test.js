@@ -188,6 +188,14 @@ function createContentTestEnv(options = {}) {
             return { success: true, meta: { changes: 0 } };
           }
 
+          if (status === "published" && options.publishUpdateChanges === 0) {
+            state.posts.set(id, {
+              ...existing,
+              deleted_at: updatedAt,
+            });
+            return { success: true, meta: { changes: 0 } };
+          }
+
           state.posts.set(id, {
             ...existing,
             status,
@@ -1300,6 +1308,51 @@ test("post publish route reports rollback failure and still returns deploy_faile
     rollbackStatus: "failed",
     rollbackError: "rollback write failed",
   });
+});
+
+test("post publish route returns not_found when the publish update races with a soft-delete", async () => {
+  const { env, state } = createContentTestEnv({ publishUpdateChanges: 0 });
+  state.posts.set("post_1", {
+    id: "post_1",
+    slug: "hello-world",
+    title: "Hello world",
+    summary: "Summary",
+    body_markdown: "# Hello world",
+    sanitized_html: "<h1>Hello world</h1>",
+    status: "draft",
+    published_at: null,
+    deleted_at: null,
+    updated_at: "2025-04-02T12:00:00.000Z",
+  });
+
+  env.PAGES_DEPLOY_HOOK_URL = "https://example.com/deploy";
+
+  let fetchCalls = 0;
+  const runtime = {
+    async fetch() {
+      fetchCalls += 1;
+      return { ok: true, status: 201 };
+    },
+  };
+
+  const response = await onRequestPostPublish(
+    {
+      env,
+      params: { id: "post_1" },
+      request: new Request("https://example.com/api/admin/posts/post_1/publish", {
+        method: "POST",
+        headers: {
+          "cf-access-authenticated-user-email": "editor@example.com",
+        },
+      }),
+    },
+    runtime,
+  );
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { ok: false, error: "not_found" });
+  assert.equal(fetchCalls, 0);
+  assert.equal(state.auditLog.length, 0);
 });
 
 test("post publish route returns not_found for missing or soft-deleted posts without auditing or deploying", async () => {
