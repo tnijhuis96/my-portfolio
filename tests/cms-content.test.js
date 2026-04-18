@@ -692,9 +692,14 @@ test("real cms create update publish and restore flows persist revision history"
   );
   assert.equal(publishResponse.status, 200);
   assert.equal(state.revisions.size, 3);
-  assert.ok(
-    [...state.revisions.values()].some((revision) => revision.post_id === created.post.id && revision.status === "published"),
+  const publishedRevision = [...state.revisions.values()].find((revision) =>
+    revision.post_id === created.post.id && revision.status === "published"
   );
+  assert.ok(publishedRevision);
+  assert.equal(publishedRevision.title, state.posts.get(created.post.id).title);
+  assert.equal(publishedRevision.summary, state.posts.get(created.post.id).summary);
+  assert.equal(publishedRevision.body_markdown, state.posts.get(created.post.id).body_markdown);
+  assert.equal(publishedRevision.sanitized_html, state.posts.get(created.post.id).sanitized_html);
 
   const restoreTarget = createdRevision.id;
   const restoreResponse = await onRequestRestoreRevision(withCmsSession({
